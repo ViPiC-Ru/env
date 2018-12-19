@@ -76,10 +76,7 @@ var environment = new App({
 	getDelim: '+',										// разделитель который нужно заменить
 	setDelim: '#',										// разделитель на который нужно заменить
 	csvDelim: ';',										// разделитель значений для файла выгрузки
-	envType: 'Process',									// тип изменяемого переменного окружения
-	efarmaApp: 'ePlus.Client.exe',						// имя файла приложения комерческой программы
-	ulusApp: 'ulus.exe',								// имя файла приложения льготной программы
-	chromeApp: 'chrome.exe'								// имя файла приложения браузерной программы
+	envType: 'Process'									// тип изменяемого переменного окружения
 });
 
 // подключаем зависимые свойства приложения
@@ -165,8 +162,9 @@ var environment = new App({
 				};
 				// очищаем по регулярному вырожению
 				return value
+					.replace(/^['"]|["']$/g, '') 				// кавычки в начале и в конце
 					.replace(/^\s+|\s+$/g, '') 					// пробельные символы в начале и в конце
-					.replace(/.\.$/, '') 						// точка в конце строки
+					.replace(/\.+$/, '') 						// точки в конце строки
 					.replace(/\(R\)/gi, '') 					// символ патента
 					.replace(/\(Registered Trademark\)/gi, '')	// тарговая марка
 					.replace(/\(Microsoft Corporation\)/gi, '')	// тарговая марка
@@ -607,68 +605,141 @@ var environment = new App({
 					// характеристики
 					if(value = app.fun.clear(item.caption)) if(item.size >= app.val.driveMinSize) data['BAK-DRIVE'] = value;
 				};
-				// ищем корневую папку комерческой программы
+				// ищем корневую папку программы eFarma
 				id = '';// сбрасываем идентификатор элимента
-				value = '\\Client\\' + app.val.efarmaApp;
-				response = service.execQuery(
-					"SELECT name\
-					 FROM CIM_DataFile\
-					 WHERE " + [
-						"name = " + app.fun.repair("C:\\eFarma2" + value),
-						"name = " + app.fun.repair("D:\\eFarma2" + value)
-					 ].join(" OR ")
-				);
-				items = new Enumerator(response);
-				for(; !items.atEnd(); items.moveNext()){// пробигаемся по коллекции
-					item = items.item();// получаем очередной элимент коллекции
-					// характеристики
-					if(item.name) data['APP-EFARMA'] = app.fun.clear(item.name);
-					if(item.name) data['APP-EFARMA-DIR'] = app.fun.clear(item.name.substr(0, item.name.length - value.length));
-					// останавливаемся на первом элименте
-					break;
+				key = '\\Client\\ePlus.Client.exe';
+				list = [// список путей для проверки
+					'C:\\eFarma2',
+					'D:\\eFarma2'
+				];
+				value = '';// сбрасываем значение для запроса
+				for(var i = 0, iLen = list.length; i < iLen; i++){
+					if(i) value += ' OR ';// добавляем разделитель
+					value += 'name = ' + app.fun.repair(list[i] + key);
 				};
-				// ищем корневую папку льготной программы
-				id = '';// сбрасываем идентификатор элимента
-				value = '\\' + app.lib.date2str(time, 'Y')  + '\\' + app.val.ulusApp;
 				response = service.execQuery(
 					"SELECT name\
 					 FROM CIM_DataFile\
-					 WHERE " + [
-						"name = " + app.fun.repair("C:\\SoftLink\\Ulus" + value),
-						"name = " + app.fun.repair("C:\\LO\\ULUS" + value),
-						"name = " + app.fun.repair("C:\\so\\Ulus" + value),
-						"name = " + app.fun.repair("C:\\ULUS" + value)
-					 ].join(" OR ")
+					 WHERE " + value
 				);
 				items = new Enumerator(response);
 				for(; !items.atEnd(); items.moveNext()){// пробигаемся по коллекции
 					item = items.item();// получаем очередной элимент коллекции
-					// характеристики
-					if(item.name) data['APP-ULUS'] = app.fun.clear(item.name);
-					if(item.name) data['APP-ULUS-DIR'] = app.fun.clear(item.name.substr(0, item.name.length - value.length));
-					// останавливаемся на первом элименте
-					break;
+					for(var i = 0, iLen = list.length; i < iLen; i++){
+						value = (list[i] + key).toLowerCase();
+						if(item.name && item.name.toLowerCase() == value){
+							// характеристики
+							data['APP-EFARMA'] = list[i] + key;
+							data['APP-EFARMA-DIR'] = list[i];
+							// останавливаемся на первом элименте
+							break;
+						};
+					};
 				};
-				// ищем корневую папку браузерной программы
+				// ищем корневую папку программы УЛУС
 				id = '';// сбрасываем идентификатор элимента
-				value = '\\' + app.val.chromeApp;
+				value = app.lib.date2str(time, 'Y');
+				key = '\\ULUS.exe';
+				list = [// список путей для проверки
+					'C:\\SoftLink\\Ulus\\' + value,
+					'C:\\LO\\ULUS\\' + value,
+					'C:\\so\\Ulus\\' + value,
+					'C:\\ULUS\\' + value
+				];
+				value = '';// сбрасываем значение для запроса
+				for(var i = 0, iLen = list.length; i < iLen; i++){
+					if(i) value += ' OR ';// добавляем разделитель
+					value += 'name = ' + app.fun.repair(list[i] + key);
+				};
 				response = service.execQuery(
 					"SELECT name\
 					 FROM CIM_DataFile\
-					 WHERE " + [
-						"name = " + app.fun.repair("C:\\Program Files (x86)\\Google\\Chrome\\Application" + value),
-						"name = " + app.fun.repair("C:\\Program Files\\Google\\Chrome\\Application" + value),
-						"name = " + app.fun.repair("C:\\Users\\user\\AppData\\Local\\Google\\Chrome\\Application" + value)
-					 ].join(" OR ")
+					 WHERE " + value
 				);
 				items = new Enumerator(response);
 				for(; !items.atEnd(); items.moveNext()){// пробигаемся по коллекции
 					item = items.item();// получаем очередной элимент коллекции
+					for(var i = 0, iLen = list.length; i < iLen; i++){
+						value = (list[i] + key).toLowerCase();
+						if(item.name && item.name.toLowerCase() == value){
+							// характеристики
+							data['APP-ULUS'] = list[i] + key;
+							data['APP-ULUS-DIR'] = list[i];
+							// останавливаемся на первом элименте
+							break;
+						};
+					};
+				};
+				// ищем корневую папку программы Chrome
+				id = '';// сбрасываем идентификатор элимента
+				key = '';// ключ для проверки
+				list = [// список путей для проверки
+					'SOFTWARE\\Clients\\StartMenuInternet\\Google Chrome\\shell\\open\\command',
+					'SOFTWARE\\WOW6432Node\\Clients\\StartMenuInternet\\Google Chrome\\shell\\open\\command'
+				];
+				value = '';// сбрасываем значение переменной
+				method = registry.methods_.item('getStringValue');
+				for(var i = 0, iLen = list.length; i < iLen && !value; i++){
+					param = method.inParameters.spawnInstance_();
+					param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
+					param.sSubKeyName = list[i];
+					param.sValueName = key;
+					item = registry.execMethod_(method.name, param); 
+					if(!item.returnValue && item.sValue) value = app.fun.clear(item.sValue);
+				};
+				if(value){// если удалось получить значение
+					key = '\\';// разделитель
+					list = value.split(key);
+					list.pop();// удаляем последнай элимент
 					// характеристики
-					if(item.name) data['APP-CHROME'] = app.fun.clear(item.name);
-					if(item.name) data['APP-CHROME-DIR'] = app.fun.clear(item.name.substr(0, item.name.length - value.length));
-					// останавливаемся на первом элименте
-					break;
+					data['APP-CHROME'] = value;
+					data['APP-CHROME-DIR'] = list.join(key);
+				};
+				// ищем корневую папку программы VLC
+				id = '';// сбрасываем идентификатор элимента
+				key = '';// ключ для проверки
+				list = [// список путей для проверки
+					'SOFTWARE\\VideoLAN\\VLC',
+					'SOFTWARE\\WOW6432Node\\VideoLAN\\VLC'
+				];
+				value = '';// сбрасываем значение переменной
+				method = registry.methods_.item('getStringValue');
+				for(var i = 0, iLen = list.length; i < iLen && !value; i++){
+					param = method.inParameters.spawnInstance_();
+					param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
+					param.sSubKeyName = list[i];
+					param.sValueName = key;
+					item = registry.execMethod_(method.name, param); 
+					if(!item.returnValue && item.sValue) value = app.fun.clear(item.sValue);
+				};
+				if(value){// если удалось получить значение
+					key = '\\';// разделитель
+					list = value.split(key);
+					list.pop();// удаляем последнай элимент
+					// характеристики
+					data['APP-VLC'] = value;
+					data['APP-VLC-DIR'] = list.join(key);
+				};
+				// вычисляем идентификатор TeamViewer
+				id = '';// сбрасываем идентификатор элимента
+				key = 'ClientID';// ключ для проверки
+				list = [// список путей для проверки
+					'SOFTWARE\\TeamViewer',
+					'SOFTWARE\\WOW6432Node\\TeamViewer'
+				];
+				value = '';// сбрасываем значение переменной
+				method = registry.methods_.item('getDWORDValue');
+				for(var i = 0, iLen = list.length; i < iLen && !value; i++){
+					param = method.inParameters.spawnInstance_();
+					param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
+					param.sSubKeyName = list[i];
+					param.sValueName = key;
+					item = registry.execMethod_(method.name, param); 
+					if(!item.returnValue && item.uValue) value = app.fun.clear(item.uValue);
+				};
+				if(value){// если удалось получить значение
+					// характеристики
+					data['APP-TEAMVIEWER-ID'] = value;
 				};
 				// вычисляем номер аптечного пункта
 				value = host.toLowerCase();
@@ -706,26 +777,6 @@ var environment = new App({
 						data['APT-SUPPORT-LOGIN'] = app.val.supportLogin;
 					};
 				};
-				// вычисляем идентификатор TeamViewer
-				value = '';// сбрасываем значение переменной
-				method = registry.methods_.item('getDWORDValue');
-				if(!value){// если нужно проверить нативную ветку реестра
-					param = method.inParameters.spawnInstance_();
-					param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
-					param.sSubKeyName = 'SOFTWARE\\TeamViewer';
-					param.sValueName = 'ClientID';
-					item = registry.execMethod_(method.name, param); 
-					if(!item.returnValue && item.uValue) value = item.uValue;
-				};
-				if(!value){// если нужно проверить x86 ветку реестра
-					param = method.inParameters.spawnInstance_();
-					param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
-					param.sSubKeyName = 'SOFTWARE\\WOW6432Node\\TeamViewer';
-					param.sValueName = 'ClientID';
-					item = registry.execMethod_(method.name, param); 
-					if(!item.returnValue && item.uValue) value = item.uValue;
-				};
-				if(value) data['APP-TEAMVIEWER-ID'] = value;
 				// вычисляем сумарное название компьютера
 				list = [];// очищаем значение переменной
 				if(data['CPU-NAME'] && data['CPU-CORE'] && data['CPU-SPEED']) list.push(app.fun.clear(data['CPU-NAME'].replace('Dual-Core', 'Intel'), 'Dual Core', 'Xeon', 'Pentium', 'Celeron', 'Core2 Duo', 'Core', 'Processor', 'Athlon 64', 'Athlon', /,.+/, /@.+/, /\d\.d+GHz/) + ' ' + data['CPU-CORE'] + 'x' + data['CPU-SPEED'].replace(',', '.').replace(' МГц', 'M').replace(' ГГц', 'G') + 'Hz');
