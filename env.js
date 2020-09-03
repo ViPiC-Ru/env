@@ -1,4 +1,4 @@
-/* 0.1.1 определяет дополнительные переменные среды
+/* 0.1.2 определяет дополнительные переменные среды
 
 cscript env.min.js [<context>] [<action>] ...
 
@@ -24,7 +24,8 @@ var env = new App({
     runStyle: 1,                                        // стиль отображения запущенных программ по умолчанию
     defReturn: 99,                                      // значение возвращаемое по умолчанию
     driveMinSize: 26 * 1024 * 1024 * 1024,              // минимальный общий объём диска для резервных копий в байтах
-    argQuote: '"',                                      // значение кавычки для аргумента
+    argWrap: '"',                                       // обрамление аргументов
+    keyWrap: '%',                                       // обрамление ключей
     argDelim: ' ',                                      // разделитель значений агрументов
     getDelim: '+',                                      // разделитель который нужно заменить
     setDelim: '#',                                      // разделитель на который нужно заменить
@@ -138,7 +139,7 @@ var env = new App({
             var shell, fso, xml, key, value, list, locator, service, registry, method,
                 param, item, items, command, id, time, drive, score, pattern, total,
                 context, path, delim = '\\', benchmark = 0, index = 0,
-                host = '', domain = '', data = {};
+                host = '', domain = '', user = {}, data = {};
 
             time = new Date();
             // получаем контекст исполения
@@ -309,13 +310,15 @@ var env = new App({
                     if (value = item.dnsHostName) host = value;
                     if (value = item.name) if (!host) host = value.toLowerCase();
                     if (item.domain != item.workgroup) domain = item.domain;
-                    if (value = item.userName) id = value;
+                    if (value = item.userName) user.login = id = value;
+                    if (value = item.userName) user.domain = value.split(delim)[0];
+                    if (value = item.userName) user.account = value.split(delim)[1];
                     // характеристики
                     if (value = app.fun.clear(host)) data['NET-HOST'] = value;
                     if (value = app.fun.clear(item.domain)) data['NET-DOMAIN'] = value;
-                    if (value = app.fun.clear(item.userName)) data['USR-LOGIN'] = value;
-                    if (value = app.fun.clear(item.userName)) data['USR-DOMAIN'] = value.split(delim)[0];
-                    if (value = app.fun.clear(item.userName)) data['USR-ACCOUNT'] = value.split(delim)[1];
+                    if (value = app.fun.clear(user.login)) data['USR-LOGIN'] = value;
+                    if (value = app.fun.clear(user.domain)) data['USR-DOMAIN'] = value;
+                    if (value = app.fun.clear(user.account)) data['USR-ACCOUNT'] = value;
                     // останавливаемся на первом элименте
                     break;
                 };
@@ -339,26 +342,29 @@ var env = new App({
                     item = registry.execMethod_(method.name, param);
                     if (!item.returnValue && item.sValue) list.push(item.sValue);
                     // формируем идентификатор пользователя
-                    if (2 == list.length) id = list.join(delim);
-                    if (value = app.fun.clear(id)) data['USR-LOGIN'] = value;
-                    if (value = app.fun.clear(id)) data['USR-DOMAIN'] = value.split(delim)[0];
-                    if (value = app.fun.clear(id)) data['USR-ACCOUNT'] = value.split(delim)[1];
+                    if (2 == list.length) user.login = id = list.join(delim);
+                    if (2 == list.length) user.domain = list[0];
+                    if (2 == list.length) user.account = list[1];
+                    // характеристики
+                    if (value = app.fun.clear(user.login)) data['USR-LOGIN'] = value;
+                    if (value = app.fun.clear(user.domain)) data['USR-DOMAIN'] = value;
+                    if (value = app.fun.clear(user.account)) data['USR-ACCOUNT'] = value;
                 };
                 // вычисляем характеристики пользователя
                 response = service.execQuery(
                     "SELECT fullName, sid" +
                     " FROM Win32_UserAccount" +
-                    " WHERE domain = " + app.fun.repair(id.split(delim)[0]) +
-                    " AND name = " + app.fun.repair(id.split(delim)[1])
+                    " WHERE domain = " + app.fun.repair(user.domain) +
+                    " AND name = " + app.fun.repair(user.account)
                 );
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
                     items.moveNext();// переходим к следующему элименту
-                    if (value = item.sid) id = value;
+                    if (value = item.sid) user.sid = id = value;
                     // характеристики
                     if (value = app.fun.clear(item.fullName)) data['USR-NAME'] = value;
-                    if (value = app.fun.clear(item.sid)) data['USR-SID'] = value;
+                    if (value = app.fun.clear(user.sid)) data['USR-SID'] = value;
                     // останавливаемся на первом элименте
                     break;
                 };
@@ -370,17 +376,17 @@ var env = new App({
                         response = service.execQuery(
                             "SELECT fullName, sid" +
                             " FROM Win32_UserAccount" +
-                            " WHERE domain = " + app.fun.repair(id.split(delim)[0]) +
-                            " AND name = " + app.fun.repair(id.split(delim)[1])
+                            " WHERE domain = " + app.fun.repair(user.domain) +
+                            " AND name = " + app.fun.repair(user.account)
                         );
                         items = new Enumerator(response);
                         while (!items.atEnd()) {// пока не достигнут конец
                             item = items.item();// получаем очередной элимент коллекции
                             items.moveNext();// переходим к следующему элименту
-                            if (value = item.sid) id = value;
+                            if (value = item.sid) user.sid = id = value;
                             // характеристики
                             if (value = app.fun.clear(item.fullName)) data['USR-NAME'] = value;
-                            if (value = app.fun.clear(item.sid)) data['USR-SID'] = value;
+                            if (value = app.fun.clear(user.sid)) data['USR-SID'] = value;
                             // останавливаемся на первом элименте
                             break;
                         };
@@ -390,7 +396,7 @@ var env = new App({
                 response = service.execQuery(
                     "SELECT localPath" +
                     " FROM Win32_UserProfile" +
-                    " WHERE sid = " + app.fun.repair(id)
+                    " WHERE sid = " + app.fun.repair(user.sid)
                 );
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
@@ -398,6 +404,21 @@ var env = new App({
                     items.moveNext();// переходим к следующему элименту
                     // характеристики
                     if (value = app.fun.clear(item.localPath)) data['USR-PROFILE'] = value;
+                    // останавливаемся на первом элименте
+                    break;
+                };
+                // вычисляем характеристики домашней папки
+                response = service.execQuery(
+                    "SELECT homeDirectory" +
+                    " FROM Win32_NetworkLoginProfile" +
+                    " WHERE name = " + app.fun.repair(user.login)
+                );
+                items = new Enumerator(response);
+                while (!items.atEnd()) {// пока не достигнут конец
+                    item = items.item();// получаем очередной элимент коллекции
+                    items.moveNext();// переходим к следующему элименту
+                    // характеристики
+                    if (value = app.fun.clear(item.homeDirectory)) data['USR-HOME'] = value;
                     // останавливаемся на первом элименте
                     break;
                 };
@@ -978,12 +999,15 @@ var env = new App({
                 } else {// если это не служебный параметр
                     if (!i) {// если это первый параметр
                         for (var key in data) {// пробигаемся по данными
-                            pattern = new RegExp('%' + key + '%', 'gi');
+                            pattern = new RegExp(app.val.keyWrap + key + app.val.keyWrap, 'gi');
                             value = value.replace(pattern, data[key]);
                         };
                     };
-                    if (-1 != value.indexOf(app.val.argDelim)) {// если есть в значении разделитель
-                        value = app.val.argQuote + value + app.val.argQuote;
+                    if (// множественное условие
+                        -1 != value.indexOf(app.val.argDelim)
+                        || -1 != value.indexOf(app.val.keyWrap)
+                    ) {// если требуется заключить значение в ковычки
+                        value = app.val.argWrap + value + app.val.argWrap;
                     };
                     items.push(value);
                 };
