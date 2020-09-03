@@ -1,4 +1,4 @@
-/* 0.1.0 определяет дополнительные переменные среды
+/* 0.1.1 определяет дополнительные переменные среды
 
 cscript env.min.js [<context>] [<action>] ...
 
@@ -636,9 +636,9 @@ var env = new App({
                         for (var i = 0, iLen = items.length; i < iLen; i++) {// пробигаемся по элиментам
                             for (var j = 0, jLen = items.item(i).childNodes.length; j < jLen; j++) {
                                 item = items.item(i).childNodes.item(j);// получаем очередной дочерний элимент
-                                if (key == item.getAttribute('key')) {// если строка подключения
-                                    value = item.getAttribute('value');
-                                    item = app.lib.str2obj(value, false, ';', '=');
+                                if (1 == item.nodeType && key == item.getAttribute('key')) {// если строка подключения
+                                    value = item.getAttribute('value');// получаем значение строки подключения
+                                    item = app.lib.str2obj(value, false, ';', '=');// преобразуем в объект
                                     // характеристики
                                     if (value = item['Data Source']) data['APP-EFARMA-CLIENT-SERVER'] = value;
                                     if (value = item['Initial Catalog']) data['APP-EFARMA-CLIENT-BASE'] = value;
@@ -691,9 +691,9 @@ var env = new App({
                         for (var i = 0, iLen = items.length; i < iLen; i++) {// пробигаемся по элиментам
                             for (var j = 0, jLen = items.item(i).childNodes.length; j < jLen; j++) {
                                 item = items.item(i).childNodes.item(j);// получаем очередной дочерний элимент
-                                if (key == item.getAttribute('key')) {// если строка подключения
-                                    value = item.getAttribute('value');
-                                    item = app.lib.str2obj(value, false, ';', '=');
+                                if (1 == item.nodeType && key == item.getAttribute('key')) {// если строка подключения
+                                    value = item.getAttribute('value');// получаем значение строки подключения
+                                    item = app.lib.str2obj(value, false, ';', '=');// преобразуем в объект
                                     // характеристики
                                     if (value = item['Data Source']) data['APP-EFARMA-CASHER-SERVER'] = value;
                                     if (value = item['Initial Catalog']) data['APP-EFARMA-CASHER-BASE'] = value;
@@ -745,10 +745,12 @@ var env = new App({
                         for (var i = 0, iLen = items.length; i < iLen; i++) {// пробигаемся по элиментам
                             for (var j = 0, jLen = items.item(i).childNodes.length; j < jLen; j++) {
                                 item = items.item(i).childNodes.item(j);// получаем очередной дочерний элимент
-                                value = item.getAttribute('value');// получаем значение
-                                switch (item.getAttribute('key')) {// поддерживаемые ключевые атрибуты
-                                    case 'LocalUrl': if (value) data['APP-EFARMA-UPDATE-DIR'] = value; break;
-                                    case 'BackupDbFolder': if (value) data['APP-EFARMA-BACKUP-DIR'] = value; break;
+                                if (1 == item.nodeType) {// если это тег с данными
+                                    value = item.getAttribute('value');// получаем значение
+                                    switch (item.getAttribute('key')) {// поддерживаемые ключевые атрибуты
+                                        case 'LocalUrl': if (value) data['APP-EFARMA-UPDATE-DIR'] = value; break;
+                                        case 'BackupDbFolder': if (value) data['APP-EFARMA-BACKUP-DIR'] = value; break;
+                                    };
                                 };
                             };
                         };
