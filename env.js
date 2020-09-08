@@ -1,4 +1,4 @@
-/* 0.1.2 определяет дополнительные переменные среды
+/* 0.1.3 определяет дополнительные переменные среды
 
 cscript env.min.js [<context>] [<action>] ...
 
@@ -997,16 +997,8 @@ var env = new App({
                     };
                     wsh.echo(list.join(app.val.csvDelim));
                 } else {// если это не служебный параметр
-                    if (!i) {// если это первый параметр
-                        for (var key in data) {// пробигаемся по данными
-                            pattern = new RegExp(app.val.keyWrap + key + app.val.keyWrap, 'gi');
-                            value = value.replace(pattern, data[key]);
-                        };
-                    };
-                    if (// множественное условие
-                        -1 != value.indexOf(app.val.argDelim)
-                        || -1 != value.indexOf(app.val.keyWrap)
-                    ) {// если требуется заключить значение в ковычки
+                    value = shell.expandEnvironmentStrings(value);
+                    if (-1 != value.indexOf(app.val.argDelim)) {// если есть разделитель
                         value = app.val.argWrap + value + app.val.argWrap;
                     };
                     items.push(value);
