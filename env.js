@@ -1,4 +1,4 @@
-/* 0.1.4-beta.2 определяет дополнительные переменные среды
+/* 0.1.4-beta.3 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -44,15 +44,16 @@ var env = new App({
 (function (wsh, app, undefined) {
     app.lib.extend(app, {
         fun: {// зависимые функции частного назначения
-            wql2date: function (wql) {// преобразовывает дату из запроса
+            wql2date: function (wql, offset) {// преобразовывает дату из запроса
                 //@param date {string} - дата из запроса
+                //@param offset {number} - смещение по времени в минутах
                 //@return {date} - преобразованная дата
                 return new Date(Date.UTC(
                     1 * wql.substr(0, 4),
                     1 * wql.substr(4, 2) - 1,
                     1 * wql.substr(6, 2),
                     1 * wql.substr(8, 2),
-                    1 * wql.substr(10, 2) - 1 * wql.substr(21, 4),
+                    1 * wql.substr(10, 2) - 1 * wql.substr(21, 4) + offset || 0,
                     1 * wql.substr(12, 2),
                     1 * wql.substr(14, 3)
                 ));
@@ -148,8 +149,8 @@ var env = new App({
         init: function () {// функция инициализации приложения
             var shell, key, value, list, locator, service, storage, registry, ldap, mode,
                 method, param, item, items, command, id, time, drive, score, total,
-                offset, index, columns, line, lines, delim, isEmpty, host = '',
-                domain = '', user = {}, data = {}, config = {},
+                offset, index, columns, line, lines, delim, isEmpty, hosts,
+                host = '', domain = '', user = {}, data = {}, config = {},
                 benchmark = 0;
 
             time = new Date();
@@ -258,9 +259,12 @@ var env = new App({
                     if (value = app.fun.clear(item.caption, 'Майкрософт', 'Microsoft', 'Edition', 'x64', ',')) data['SYS-NAME'] = value;
                     if (value = app.fun.clear(item.version)) data['SYS-VERSION'] = value;
                     if (value = item.localDateTime) data['SYS-TIME'] = app.lib.date2str(app.fun.wql2date(value), 'd.m.Y H:i:s');
+                    if (value = item.localDateTime) data['SYS-TIME-DATE'] = app.lib.date2str(app.fun.wql2date(value), 'd.m.Y');
                     if (value = app.fun.clear(item.systemDrive)) data['SYS-DRIVE'] = value;
                     if (value = item.installDate) data['SYS-INSTALL'] = app.lib.date2str(app.fun.wql2date(value), 'd.m.Y H:i:s');
+                    if (value = item.installDate) data['SYS-INSTALL-DATE'] = app.lib.date2str(app.fun.wql2date(value), 'd.m.Y');
                     if (value = item.lastBootUpTime) data['SYS-RESET'] = app.lib.date2str(app.fun.wql2date(value), 'd.m.Y H:i:s');
+                    if (value = item.lastBootUpTime) data['SYS-RESET-DATE'] = app.lib.date2str(app.fun.wql2date(value), 'd.m.Y');
                     if (value = app.fun.clear(item.serialNumber)) data['SYS-SERIAL'] = value;
                     if (value = app.fun.clear(item.description)) data['SYS-DESCRIPTION'] = value;
                     data['SYS-ARCHITECTURE'] = item.osArchitecture && !item.osArchitecture.indexOf('64') ? 'x64' : 'x86';
@@ -297,7 +301,8 @@ var env = new App({
                     item = items.item();// получаем очередной элимент коллекции
                     items.moveNext();// переходим к следующему элименту
                     // характеристики
-                    if (value = app.fun.clear(item.releaseDate)) data['PCB-BIOS-RELEASE'] = app.lib.date2str(app.fun.wql2date(value), 'd.m.Y H:i:s');
+                    if (value = app.fun.clear(item.releaseDate)) data['PCB-BIOS-RELEASE'] = app.lib.date2str(app.fun.wql2date(value, time.getTimezoneOffset()), 'd.m.Y H:i:s');
+                    if (value = app.fun.clear(item.releaseDate)) data['PCB-BIOS-RELEASE-DATE'] = app.lib.date2str(app.fun.wql2date(value, time.getTimezoneOffset()), 'd.m.Y');
                     if (value = app.fun.clear(item.manufacturer, 'Inc.')) data['PCB-BIOS-MANUFACTURE'] = value;
                     if (value = app.fun.clear(item.smBIOSBIOSVersion)) data['PCB-BIOS-VERSION'] = value;
                     if (value = app.fun.clear(item.serialNumber)) data['PCB-BIOS-SERIAL'] = value;
@@ -375,6 +380,7 @@ var env = new App({
                     if (value = item.speed) data['NET-SPEED'] = app.fun.info2str(value, 0, 1000) + 'бит/с';
                     if (value = item.speed) data['NET-SPEED-VAL'] = value;
                     if (value = item.timeOfLastReset) data['NET-RESET'] = app.lib.date2str(app.fun.wql2date(value), 'd.m.Y H:i:s');
+                    if (value = item.timeOfLastReset) data['NET-RESET-DATE'] = app.lib.date2str(app.fun.wql2date(value), 'd.m.Y');
                     // косвенно считаем производительность
                     if (value = item.speed) score += 8.12567 * Math.sqrt(value / 100 / 1000 / 1000);
                     // останавливаемся на первом элименте
@@ -439,7 +445,7 @@ var env = new App({
                 // вычисляем характеристики пользователя
                 (function (service) {// замыкаем для локальных переменных
                     id = '';// сбрасываем идентификатор элимента
-                    list = ['.', domain];// список альтернативных поставщиков
+                    hosts = ['.', domain];// список альтернативных поставщиков
                     do {// пробигаемся по поставщикам данных
                         response = service.execQuery(
                             "SELECT fullName, sid" +
@@ -453,14 +459,26 @@ var env = new App({
                             items.moveNext();// переходим к следующему элименту
                             if (value = item.sid) user.sid = id = value;
                             // характеристики
-                            if (value = app.fun.clear(item.fullName)) data['USR-NAME'] = value;
                             if (value = app.fun.clear(user.sid)) data['USR-SID'] = value;
+                            if (value = app.fun.clear(item.fullName)) data['USR-NAME'] = value;
+                            if (value = app.fun.clear(item.fullName)) {// если получено значение
+                                list = value.split(app.val.argDelim);// рабзиваем на фрагменты
+                                for (var i = list.length - 1; i > -1; i--) {// пробигаемся по списку
+                                    value = app.fun.clear(list[i], /[\[\(,\.\)\]]/g);
+                                    if (value.length > 2) list[i] = value;
+                                    else list.splice(i, 1);
+                                };
+                                if (value = list[0]) data['USR-NAME-FIRST'] = value;
+                                if (value = list[1]) data['USR-NAME-SECOND'] = value;
+                                if (value = list[2]) data['USR-NAME-THIRD'] = value;
+                                if (value = list[3]) data['USR-NAME-FOURTH'] = value;
+                            };
                             // останавливаемся на первом элименте
                             break;
                         };
                         try {// пробуем подключиться к следующему поставщику
-                            if (!list.length || id) service = null;
-                            else service = locator.connectServer(list.shift(), 'root\\CIMV2');
+                            if (!hosts.length || id) service = null;
+                            else service = locator.connectServer(hosts.shift(), 'root\\CIMV2');
                         } catch (e) { service = null; };
                     } while (service);
                 })(service);

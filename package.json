@@ -1,6 +1,6 @@
 {
     "name": "env",
-    "version": "0.1.4-beta.2",
+    "version": "0.1.4-beta.3",
     "description": "Определяет дополнительные переменные среды",
     "main": "env.js",
     "author": "ViPiC",
