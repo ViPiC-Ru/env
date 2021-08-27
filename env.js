@@ -1,4 +1,4 @@
-/* 0.1.4-beta.1 определяет дополнительные переменные среды
+/* 0.1.4-beta.2 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -1094,7 +1094,7 @@ var env = new App({
                 value = wsh.arguments.item(index);// получаем очередное значение
                 value = value.split(app.val.getDelim).join(app.val.setDelim);
                 value = shell.expandEnvironmentStrings(value);
-                if (-1 != value.indexOf(app.val.argDelim)) {// если есть разделитель
+                if (!value || -1 != value.indexOf(app.val.argDelim)) {// если есть разделитель
                     value = app.val.argWrap + value + app.val.argWrap;
                 };
                 items.push(value);
