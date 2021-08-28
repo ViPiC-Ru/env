@@ -1,4 +1,4 @@
-/* 0.1.4-beta.3 определяет дополнительные переменные среды
+/* 0.1.4-beta.4 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -48,7 +48,7 @@ var env = new App({
                 //@param date {string} - дата из запроса
                 //@param offset {number} - смещение по времени в минутах
                 //@return {date} - преобразованная дата
-                return new Date(Date.UTC(
+                return new Date(wql ? Date.UTC(
                     1 * wql.substr(0, 4),
                     1 * wql.substr(4, 2) - 1,
                     1 * wql.substr(6, 2),
@@ -56,7 +56,7 @@ var env = new App({
                     1 * wql.substr(10, 2) - 1 * wql.substr(21, 4) + offset || 0,
                     1 * wql.substr(12, 2),
                     1 * wql.substr(14, 3)
-                ));
+                ) : 0);
             },
             bin2key: function (bin) {// преобразовывает бинарные данные в ключ продукта
                 //@param bin {binary} - бинарные данные ключа продукта
@@ -148,7 +148,7 @@ var env = new App({
         },
         init: function () {// функция инициализации приложения
             var shell, key, value, list, locator, service, storage, registry, ldap, mode,
-                method, param, item, items, command, id, time, drive, score, total,
+                method, param, unit, item, items, command, id, time, drive, score, total,
                 offset, index, columns, line, lines, delim, isEmpty, hosts,
                 host = '', domain = '', user = {}, data = {}, config = {},
                 benchmark = 0;
@@ -284,7 +284,7 @@ var env = new App({
                     items.moveNext();// переходим к следующему элименту
                     // характеристики
                     if (value = app.fun.clear(item.product)) data['PCB-NAME'] = value;
-                    if (value) if (value = app.fun.clear(item.manufacturer, 'Inc.')) data['PCB-NAME'] = value.split(' ')[0] + ' ' + app.fun.clear(item.product);
+                    if (value) if (value = app.fun.clear(item.manufacturer, 'Inc.').replace('Hewlett-Packard', 'HP')) data['PCB-NAME'] = value.split(' ')[0] + ' ' + app.fun.clear(item.product);
                     if (value = app.fun.clear(item.serialNumber)) data['PCB-SERIAL'] = value;
                     // останавливаемся на первом элименте
                     break;
@@ -388,7 +388,6 @@ var env = new App({
                 };
                 if (score) benchmark = benchmark ? Math.min(benchmark, score) : score;
                 // вычисляем дополнительные характеристики
-                id = '';// сбрасываем идентификатор элимента
                 response = service.execQuery(
                     "SELECT *" +
                     " FROM Win32_ComputerSystem"
@@ -400,22 +399,20 @@ var env = new App({
                     if (value = item.dnsHostName) host = value;
                     if (value = item.name) if (!host) host = value.toLowerCase();
                     if (item.domain != item.workgroup) domain = item.domain;
-                    if (value = item.userName) user.login = id = value;
+                    // формируем идентификатор пользователя
                     if (value = item.userName) user.domain = value.split(app.val.keyDelim)[0];
                     if (value = item.userName) user.account = value.split(app.val.keyDelim)[1];
+                    if (value = item.userName) user.login = value;
                     // характеристики
                     if (value = app.fun.clear(host)) data['NET-HOST'] = value;
                     if (value = app.fun.clear(item.domain)) data['NET-DOMAIN'] = value;
-                    if (value = app.fun.clear(user.login)) data['USR-LOGIN'] = value;
-                    if (value = app.fun.clear(user.domain)) data['USR-DOMAIN'] = value;
-                    if (value = app.fun.clear(user.account)) data['USR-ACCOUNT'] = value;
                     if (value = app.fun.clear(item.model)) data['DEV-NAME'] = value;
-                    if (value) if (value = app.fun.clear(item.manufacturer, 'Inc.')) data['DEV-NAME'] = value.split(' ')[0] + ' ' + app.fun.clear(item.model);
+                    if (value) if (value = app.fun.clear(item.manufacturer, 'Inc.', 'Hewlett-Packard')) data['DEV-NAME'] = value.split(' ')[0] + ' ' + app.fun.clear(item.model);
                     // останавливаемся на первом элименте
                     break;
                 };
                 // поправка на старые операционные системы
-                if (!id) {// если идентификатор пользователя неопределён
+                if (!user.login) {// если идентификатор пользователя неопределён
                     list = [];// сбрасываем список значений
                     // вычисляем имя пользователя поумолчанию
                     method = registry.methods_.item('getStringValue');
@@ -434,84 +431,123 @@ var env = new App({
                     item = registry.execMethod_(method.name, param);
                     if (!item.returnValue && item.sValue) list.push(item.sValue);
                     // формируем идентификатор пользователя
-                    if (2 == list.length) user.login = id = list.join(app.val.keyDelim);
                     if (2 == list.length) user.domain = list[0];
                     if (2 == list.length) user.account = list[1];
-                    // характеристики
-                    if (value = app.fun.clear(user.login)) data['USR-LOGIN'] = value;
-                    if (value = app.fun.clear(user.domain)) data['USR-DOMAIN'] = value;
-                    if (value = app.fun.clear(user.account)) data['USR-ACCOUNT'] = value;
+                    if (2 == list.length) user.login = list.join(app.val.keyDelim);
+                };
+                // вычисляем характеристики из локального профиля
+                if (!user.login) {// если идентификатор пользователя неопределён
+                    unit = null;// сбрасываем значение
+                    response = service.execQuery(
+                        "SELECT lastUseTime, localPath, loaded" +
+                        " FROM Win32_UserProfile" +
+                        " WHERE special = FALSE"
+                    );
+                    items = new Enumerator(response);
+                    while (!items.atEnd()) {// пока не достигнут конец
+                        item = items.item();// получаем очередной элимент коллекции
+                        items.moveNext();// переходим к следующему элименту
+                        // производим сравнение элиментов
+                        value = unit ? 0 : 1;// сбрасваем значение для сравнения
+                        if (!value) value = item.loaded && !unit.loaded ? 1 : value;
+                        if (!value) value = app.lib.compare(app.fun.wql2date(item.lastUseTime), app.fun.wql2date(unit.lastUseTime));
+                        // запоминаем более подходящий элимент
+                        if (value > 0) unit = item;
+                    };
+                    if (item = unit) {// если есть подходящий элимент
+                        // формируем идентификатор пользователя
+                        if (value = item.localPath.split(app.val.keyDelim).pop()) user.account = value;
+                        if (value = item.localPath) user.profile = value;
+                    };
                 };
                 // вычисляем характеристики пользователя
-                (function (service) {// замыкаем для локальных переменных
-                    id = '';// сбрасываем идентификатор элимента
-                    hosts = ['.', domain];// список альтернативных поставщиков
-                    do {// пробигаемся по поставщикам данных
-                        response = service.execQuery(
-                            "SELECT fullName, sid" +
-                            " FROM Win32_UserAccount" +
-                            " WHERE domain = " + app.fun.repair(user.domain) +
-                            " AND name = " + app.fun.repair(user.account)
-                        );
-                        items = new Enumerator(response);
-                        while (!items.atEnd()) {// пока не достигнут конец
-                            item = items.item();// получаем очередной элимент коллекции
-                            items.moveNext();// переходим к следующему элименту
-                            if (value = item.sid) user.sid = id = value;
-                            // характеристики
-                            if (value = app.fun.clear(user.sid)) data['USR-SID'] = value;
-                            if (value = app.fun.clear(item.fullName)) data['USR-NAME'] = value;
-                            if (value = app.fun.clear(item.fullName)) {// если получено значение
-                                list = value.split(app.val.argDelim);// рабзиваем на фрагменты
-                                for (var i = list.length - 1; i > -1; i--) {// пробигаемся по списку
-                                    value = app.fun.clear(list[i], /[\[\(,\.\)\]]/g);
-                                    if (value.length > 2) list[i] = value;
-                                    else list.splice(i, 1);
+                if (user.account) {// если идентификатор пользователя определён
+                    (function (service) {// замыкаем для локальных переменных
+                        hosts = ['.', domain];// список альтернативных поставщиков
+                        do {// пробигаемся по поставщикам данных
+                            response = service.execQuery(
+                                "SELECT domain, name, fullName, sid" +
+                                " FROM Win32_UserAccount" +
+                                " WHERE name = " + app.fun.repair(user.account) +
+                                (user.domain ? " AND domain = " + app.fun.repair(user.domain) : "")
+                            );
+                            items = new Enumerator(response);
+                            while (!items.atEnd()) {// пока не достигнут конец
+                                item = items.item();// получаем очередной элимент коллекции
+                                items.moveNext();// переходим к следующему элименту
+                                // характеристики
+                                if (value = app.fun.clear(item.fullName)) data['USR-NAME'] = value;
+                                if (value = app.fun.clear(item.fullName)) {// если получено значение
+                                    list = value.split(app.val.argDelim);// рабзиваем на фрагменты
+                                    for (var i = list.length - 1; i > -1; i--) {// пробигаемся по списку
+                                        value = app.fun.clear(list[i], /[\[\(,\.\)\]]/g);
+                                        if (value.length > 2) list[i] = value;
+                                        else list.splice(i, 1);
+                                    };
+                                    if (value = list[0]) data['USR-NAME-FIRST'] = value;
+                                    if (value = list[1]) data['USR-NAME-SECOND'] = value;
+                                    if (value = list[2]) data['USR-NAME-THIRD'] = value;
+                                    if (value = list[3]) data['USR-NAME-FOURTH'] = value;
                                 };
-                                if (value = list[0]) data['USR-NAME-FIRST'] = value;
-                                if (value = list[1]) data['USR-NAME-SECOND'] = value;
-                                if (value = list[2]) data['USR-NAME-THIRD'] = value;
-                                if (value = list[3]) data['USR-NAME-FOURTH'] = value;
+                                // формируем идентификатор пользователя
+                                list = [];// сбрасываем список значений
+                                if (value = item.sid) user.sid = value;
+                                if (value = item.domain) list.push(value);
+                                if (value = item.name) list.push(value);
+                                if (2 == list.length) user.domain = list[0];
+                                if (2 == list.length) user.account = list[1];
+                                if (2 == list.length) user.login = list.join(app.val.keyDelim);
+                                // останавливаемся на первом элименте
+                                break;
                             };
-                            // останавливаемся на первом элименте
-                            break;
-                        };
-                        try {// пробуем подключиться к следующему поставщику
-                            if (!hosts.length || id) service = null;
-                            else service = locator.connectServer(hosts.shift(), 'root\\CIMV2');
-                        } catch (e) { service = null; };
-                    } while (service);
-                })(service);
-                // вычисляем характеристики профиля пользователя
-                response = service.execQuery(
-                    "SELECT localPath" +
-                    " FROM Win32_UserProfile" +
-                    " WHERE sid = " + app.fun.repair(user.sid)
-                );
-                items = new Enumerator(response);
-                while (!items.atEnd()) {// пока не достигнут конец
-                    item = items.item();// получаем очередной элимент коллекции
-                    items.moveNext();// переходим к следующему элименту
-                    // характеристики
-                    if (value = app.fun.clear(item.localPath)) data['USR-PROFILE'] = value;
-                    // останавливаемся на первом элименте
-                    break;
+                            try {// пробуем подключиться к следующему поставщику
+                                if (!hosts.length || user.sid) service = null;
+                                else service = locator.connectServer(hosts.shift(), 'root\\CIMV2');
+                            } catch (e) { service = null; };
+                        } while (service);
+                    })(service);
                 };
-                // вычисляем характеристики домашней папки
-                response = service.execQuery(
-                    "SELECT homeDirectory" +
-                    " FROM Win32_NetworkLoginProfile" +
-                    " WHERE name = " + app.fun.repair(user.login)
-                );
-                items = new Enumerator(response);
-                while (!items.atEnd()) {// пока не достигнут конец
-                    item = items.item();// получаем очередной элимент коллекции
-                    items.moveNext();// переходим к следующему элименту
-                    // характеристики
-                    if (value = app.fun.clear(item.homeDirectory)) data['USR-HOME'] = value;
-                    // останавливаемся на первом элименте
-                    break;
+                // вычисляем характеристики из сетевого профиля
+                if (user.login) {// если нужно выполнить
+                    response = service.execQuery(
+                        "SELECT homeDirectory" +
+                        " FROM Win32_NetworkLoginProfile" +
+                        " WHERE name = " + app.fun.repair(user.login)
+                    );
+                    items = new Enumerator(response);
+                    while (!items.atEnd()) {// пока не достигнут конец
+                        item = items.item();// получаем очередной элимент коллекции
+                        items.moveNext();// переходим к следующему элименту
+                        // формируем идентификатор пользователя
+                        if (value = item.homeDirectory) user.home = value;
+                        // останавливаемся на первом элименте
+                        break;
+                    };
                 };
+                // вычисляем характеристики из локального профиля
+                if (!user.profile && user.sid) {// если нужно выполнить
+                    response = service.execQuery(
+                        "SELECT localPath" +
+                        " FROM Win32_UserProfile" +
+                        " WHERE sid = " + app.fun.repair(user.sid)
+                    );
+                    items = new Enumerator(response);
+                    while (!items.atEnd()) {// пока не достигнут конец
+                        item = items.item();// получаем очередной элимент коллекции
+                        items.moveNext();// переходим к следующему элименту
+                        // формируем идентификатор пользователя
+                        if (value = item.localPath) user.profile = value;
+                        // останавливаемся на первом элименте
+                        break;
+                    };
+                };
+                // заполняем сводную информацию по пользователю
+                if (value = app.fun.clear(user.sid)) data['USR-SID'] = value;
+                if (value = app.fun.clear(user.login)) data['USR-LOGIN'] = value;
+                if (value = app.fun.clear(user.domain)) data['USR-DOMAIN'] = value;
+                if (value = app.fun.clear(user.account)) data['USR-ACCOUNT'] = value;
+                if (value = app.fun.clear(user.profile)) data['USR-PROFILE'] = value;
+                if (value = app.fun.clear(user.home)) data['USR-HOME'] = value;
                 // вычисляем distinguished name компьютера в active directory 
                 if (host) {// если есть идентификатор компьютера
                     response = ldap.execQuery(
