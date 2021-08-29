@@ -1,4 +1,4 @@
-/* 0.1.4-beta.4 определяет дополнительные переменные среды
+/* 0.1.4-beta.5 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -53,7 +53,7 @@ var env = new App({
                     1 * wql.substr(4, 2) - 1,
                     1 * wql.substr(6, 2),
                     1 * wql.substr(8, 2),
-                    1 * wql.substr(10, 2) - 1 * wql.substr(21, 4) + offset || 0,
+                    1 * wql.substr(10, 2) - 1 * wql.substr(21, 4) + (offset || 0),
                     1 * wql.substr(12, 2),
                     1 * wql.substr(14, 3)
                 ) : 0);
