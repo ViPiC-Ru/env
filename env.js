@@ -1,13 +1,16 @@
-/* 0.1.4-beta.6 определяет дополнительные переменные среды
+/* 0.1.4-beta.7 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
 <context>   - В контексте какого компьютера получить переменные.
 <input>     - Формат текстовых данных стандартного потока ввода.
+    ini     - Ввести дополнительные переменные в ini формате.
+    csv     - Ввести в csv формате (заглавное написание ожидает ещё и заголовок).
+    tsv     - Ввести в tsv формате (заглавное написание ожидает ещё и заголовок).
 <output>    - Формат текстовых данных стандартного потока вывода.
     ini     - Вывести дополнительные переменные в ini формате.
-    csv     - Вывести в csv формате (заглавное написание добовляет заголовок).
-    tsv     - Вывести в tsv формате (заглавное написание добовляет заголовок).
+    csv     - Вывести в csv формате (заглавное написание добавляет заголовок).
+    tsv     - Вывести в tsv формате (заглавное написание добавляет заголовок).
 <charset>   - Кодировка текста стандартного потока ввода.
 <option>    - Дополнительные опции (может быть несколько, порядок не важен).
     silent  - Последующие команды выполнить без отображения.
@@ -16,17 +19,9 @@ cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ..
 */
 
 var env = new App({
-    aptPref: "apt",                                     // префикс в имени компьютера для определения номера аптечного пункта
-    aptLen: 3,                                          // колличество цифр отведённых под номер аптечного пункта
-    aptNone: "XXX",                                     // значение для нулевого аптечного пункта
-    wsPref: "c",                                        // префикс в имени компьютера для определения номера компьютера
-    wsLen: 1,                                           // колличество цифр отведённых под номер компьютера
-    wsFirstDesc: "Основной",                            // описание первого компьютера в аптечном пункте
-    wsNextDesc: "Дополнительный",                       // описание следующего компьютера в аптечном пункте
-    wsNoneDesc: "Временный",                            // описание не опознанного компьютера в аптечном пункте
+    driveMinSize: 26 * 1024 * 1024 * 1024,              // минимальный общий объём диска для резервных копий в байтах
     runStyle: 1,                                        // стиль отображения запущенных программ по умолчанию
     defReturn: 0,                                       // значение возвращаемое по умолчанию
-    driveMinSize: 26 * 1024 * 1024 * 1024,              // минимальный общий объём диска для резервных копий в байтах
     argWrap: '"',                                       // обрамление аргументов
     argDelim: " ",                                      // разделитель значений агрументов
     linDelim: "\r\n",                                   // разделитель строк значений
@@ -243,7 +238,7 @@ var env = new App({
             // создаём служебные объекты
             shell = new ActiveXObject("WScript.Shell");
             locator = new ActiveXObject("wbemScripting.Swbemlocator");
-            locator.security_.impersonationLevel = 3;
+            locator.security_.impersonationLevel = 3;// Impersonate
             if (config.context) {// если есть контекст выполнения
                 try {// пробуем подключиться к компьютеру
                     service = locator.connectServer(config.context, "root\\CIMV2");
@@ -1000,32 +995,6 @@ var env = new App({
                 if (value) {// если удалось получить значение
                     // характеристики
                     data["APP-TEAMVIEWER-ID"] = value;
-                };
-                // вычисляем номер аптечного пункта
-                value = host.toLowerCase();
-                if (0 == value.indexOf(app.val.aptPref)) {// если это компьютер в аптеки
-                    value = value.substr(app.val.aptPref.length, app.val.aptLen);
-                    if (!isNaN(value)) {// если удалось получить номер аптеки
-                        data["APT-NUMBER"] = value || app.val.aptNone;
-                        data["APT-NUMBER-VAL"] = Number(value);
-                    };
-                };
-                // вычисляем номер компьютера в аптечном пункте
-                value = host.toLowerCase();
-                if (0 == value.indexOf(app.val.aptPref)) {// если это компьютер в аптеки
-                    value = value.substr(app.val.aptPref.length + app.val.aptLen);
-                    if (value) {// если это не основной компьютер в аптечном пункте
-                        if (0 == value.indexOf(app.val.wsPref)) {// если это дополнительный компьютер
-                            value = value.substr(app.val.wsPref.length, app.val.wsLen);
-                            if (!isNaN(value)) {// если удалось получить номер компьютера
-                                value = Number(value);
-                            } else value = 0;
-                        } else value = 0;
-                    } else value = 1;
-                    data["APT-COMPUTER-VAL"] = value;
-                    if (0 == value) data["APT-COMPUTER"] = app.val.wsNoneDesc;
-                    else if (1 == value) data["APT-COMPUTER"] = app.val.wsFirstDesc;
-                    else data["APT-COMPUTER"] = app.val.wsNextDesc;
                 };
                 // вычисляем сумарное название компьютера
                 list = [];// очищаем значение переменной
