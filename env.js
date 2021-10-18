@@ -1,4 +1,4 @@
-/* 1.0.0 определяет дополнительные переменные среды
+/* 1.0.1 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -401,8 +401,6 @@ var env = new App({
                     if (value = item.speed) data["NET-SPEED-VAL"] = value;
                     if (value = item.timeOfLastReset) data["NET-RESET"] = app.lib.date2str(app.fun.wql2date(value), "d.m.Y H:i:s");
                     if (value = item.timeOfLastReset) data["NET-RESET-DATE"] = app.lib.date2str(app.fun.wql2date(value), "d.m.Y");
-                    // косвенно считаем производительность
-                    if (value = item.speed) score += 8.12567 * Math.sqrt(value / 100 / 1000 / 1000);
                     // останавливаемся на первом элименте
                     break;
                 };
