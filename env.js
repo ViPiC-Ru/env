@@ -1,4 +1,4 @@
-/* 1.0.1 определяет дополнительные переменные среды
+/* 1.0.2 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -499,8 +499,10 @@ var env = new App({
                                     list = value.split(app.val.argDelim);// рабзиваем на фрагменты
                                     for (var i = list.length - 1; i > -1; i--) {// пробигаемся по списку
                                         value = app.fun.clear(list[i], /[\[\(,\.\)\]]/g);
-                                        if (value.length > 2) list[i] = value;
-                                        else list.splice(i, 1);
+                                        isEmpty = value.length < 3;// считать ли это значение пустым
+                                        isEmpty = isEmpty || app.lib.hasValue(["von"], value, true);
+                                        if(isEmpty) list.splice(i, 1);
+                                        else list[i] = value;
                                     };
                                     if (value = list[0]) data["USR-NAME-FIRST"] = value;
                                     if (value = list[1]) data["USR-NAME-SECOND"] = value;
@@ -600,7 +602,7 @@ var env = new App({
                     else if (9 == item.architecture) data["CPU-ARCHITECTURE"] = "x64";
                     if (value = item.maxClockSpeed) data["CPU-SPEED"] = app.fun.info2str(value * 1000 * 1000, 2, 1000) + "Гц";
                     if (value = item.maxClockSpeed) data["CPU-SPEED-VAL"] = value * 1000 * 1000;
-                    if (value = app.fun.clear(item.name, "CPU", "APU", "Процессор", "Processor", "with", "Radeon HD Graphics")) data["CPU-NAME"] = value;
+                    if (value = app.fun.clear(item.name, "CPU", "APU", "Процессор", "Processor", "with", "Radeon HD Graphics", "11th Gen")) data["CPU-NAME"] = value;
                     if (value = app.fun.clear(item.revision)) data["CPU-VERSION"] = value;
                     if (value = item.numberOfCores) data["CPU-CORE"] = value;
                     if (value = app.fun.clear(item.socketDesignation, "SOCKET 0")) data["CPU-SOCKET"] = value;
