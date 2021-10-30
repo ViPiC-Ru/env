@@ -1,4 +1,4 @@
-/* 1.0.2 определяет дополнительные переменные среды
+/* 1.0.3 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -167,7 +167,7 @@ var env = new App({
             }
         },
         init: function () {// функция инициализации приложения
-            var shell, key, value, list, locator, service, storage, registry, ldap, mode,
+            var shell, key, value, list, locator, cim, ldap, storage, registry, mode,
                 method, param, unit, item, items, command, id, time, drive, score, total,
                 offset, index, columns, line, lines, delim, isEmpty, hosts,
                 host = "", domain = "", user = {}, data = {}, config = {},
@@ -240,31 +240,45 @@ var env = new App({
             locator = new ActiveXObject("wbemScripting.Swbemlocator");
             locator.security_.impersonationLevel = 3;// Impersonate
             if (config.context) {// если есть контекст выполнения
-                try {// пробуем подключиться к компьютеру
-                    service = locator.connectServer(config.context, "root\\CIMV2");
-                    ldap = locator.connectServer(config.context, "root\\directory\\LDAP");
-                    storage = locator.connectServer(config.context, "root\\Microsoft\\Windows\\Storage");
-                    registry = locator.connectServer(config.context, "root\\default").get("stdRegProv");
-                } catch (e) { service = null; };
+                for (var index = 1; index; index++) {
+                    try {// пробуем подключиться к компьютеру
+                        switch (index) {// последовательно создаём объекты
+                            case 1: cim = locator.connectServer(config.context, "root\\CIMV2"); break;
+                            case 2: ldap = locator.connectServer(config.context, "root\\directory\\LDAP"); break;
+                            case 3: storage = locator.connectServer(config.context, "root\\Microsoft\\Windows\\Storage"); break;
+                            case 4: registry = locator.connectServer(config.context, "root\\default").get("stdRegProv"); break;
+                            default: index = -1;// завершаем создание
+                        };
+                    } catch (e) {// при возникновении ошибки
+                        switch (index) {// последовательно сбрасываем объекты
+                            case 1: cim = null; break;
+                            case 2: ldap = null; break;
+                            case 3: storage = null; break;
+                            case 4: registry = null; break;
+                        };
+                    };
+                };
             };
             // получаем необходимые данные
-            if (service) {// если удалось получить доступ к сервису
+            if (cim) {// если удалось получить доступ к объекту
                 // вычисляем ключ операционной системы
-                method = registry.methods_.item("getBinaryValue");
-                param = method.inParameters.spawnInstance_();
-                param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
-                param.sSubKeyName = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
-                param.sValueName = "DigitalProductId";
-                item = registry.execMethod_(method.name, param);
-                if (!item.returnValue) {// если удалось прочитать значение
-                    value = app.fun.bin2key(item.uValue);// преобразовываем значение ключа
-                    if (value && "BBBBB-BBBBB-BBBBB-BBBBB-BBBBB" != value) {// если ключ не пуст
-                        data["SYS-KEY"] = value;
+                if (registry) {// если удалось получить доступ к объекту
+                    method = registry.methods_.item("getBinaryValue");
+                    param = method.inParameters.spawnInstance_();
+                    param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
+                    param.sSubKeyName = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
+                    param.sValueName = "DigitalProductId";
+                    item = registry.execMethod_(method.name, param);
+                    if (!item.returnValue) {// если удалось прочитать значение
+                        value = app.fun.bin2key(item.uValue);// преобразовываем значение ключа
+                        if (value && "BBBBB-BBBBB-BBBBB-BBBBB-BBBBB" != value) {// если ключ не пуст
+                            data["SYS-KEY"] = value;
+                        };
                     };
                 };
                 // вычисляем характеристики операционной системы
                 id = "";// сбрасываем идентификатор элимента
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT *" +
                     " FROM Win32_OperatingSystem" +
                     " WHERE primary = TRUE"
@@ -293,7 +307,7 @@ var env = new App({
                 };
                 // вычисляем характеристики материнской платы
                 id = "";// сбрасываем идентификатор элимента
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT manufacturer, product, serialNumber" +
                     " FROM Win32_BaseBoard" +
                     " WHERE hostingBoard = TRUE"
@@ -311,7 +325,7 @@ var env = new App({
                 };
                 // вычисляем характеристики basic input/output system
                 id = "";// сбрасываем идентификатор элимента
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT releaseDate, manufacturer, smBIOSBIOSVersion, serialNumber" +
                     " FROM Win32_BIOS" +
                     " WHERE primaryBIOS = TRUE"
@@ -331,7 +345,7 @@ var env = new App({
                 };
                 // вычисляем характеристики сетевого соединения
                 id = "";// сбрасываем идентификатор элимента
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT *" +
                     " FROM Win32_NetworkAdapterConfiguration" +
                     " WHERE ipEnabled = TRUE"
@@ -386,7 +400,7 @@ var env = new App({
                 };
                 // вычисляем характеристики сетевого адаптера
                 score = 0;// обнуляем текущую оценку
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT speed, timeOfLastReset" +
                     " FROM Win32_NetworkAdapter" +
                     " WHERE netEnabled = TRUE" +
@@ -406,7 +420,7 @@ var env = new App({
                 };
                 if (score) benchmark = benchmark ? Math.min(benchmark, score) : score;
                 // вычисляем дополнительные характеристики
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT *" +
                     " FROM Win32_ComputerSystem"
                 );
@@ -429,8 +443,8 @@ var env = new App({
                     // останавливаемся на первом элименте
                     break;
                 };
-                // поправка на старые операционные системы
-                if (!user.login) {// если идентификатор пользователя неопределён
+                // для поддержки старых операционных систем
+                if (!user.login && registry) {// если нужно выполнить
                     list = [];// сбрасываем список значений
                     // вычисляем имя пользователя поумолчанию
                     method = registry.methods_.item("getStringValue");
@@ -456,7 +470,7 @@ var env = new App({
                 // вычисляем характеристики из локального профиля
                 if (!user.login) {// если идентификатор пользователя неопределён
                     unit = null;// сбрасываем значение
-                    response = service.execQuery(
+                    response = cim.execQuery(
                         "SELECT lastUseTime, localPath, loaded" +
                         " FROM Win32_UserProfile" +
                         " WHERE special = FALSE"
@@ -480,10 +494,10 @@ var env = new App({
                 };
                 // вычисляем характеристики пользователя
                 if (user.account) {// если идентификатор пользователя определён
-                    (function (service) {// замыкаем для локальных переменных
+                    (function (cim) {// замыкаем для локальных переменных
                         hosts = [".", domain];// список альтернативных поставщиков
                         do {// пробигаемся по поставщикам данных
-                            response = service.execQuery(
+                            response = cim.execQuery(
                                 "SELECT domain, name, fullName, sid" +
                                 " FROM Win32_UserAccount" +
                                 " WHERE name = " + app.fun.repair(user.account) +
@@ -501,7 +515,7 @@ var env = new App({
                                         value = app.fun.clear(list[i], /[\[\(,\.\)\]]/g);
                                         isEmpty = value.length < 3;// считать ли это значение пустым
                                         isEmpty = isEmpty || app.lib.hasValue(["von"], value, true);
-                                        if(isEmpty) list.splice(i, 1);
+                                        if (isEmpty) list.splice(i, 1);
                                         else list[i] = value;
                                     };
                                     if (value = list[0]) data["USR-NAME-FIRST"] = value;
@@ -521,15 +535,15 @@ var env = new App({
                                 break;
                             };
                             try {// пробуем подключиться к следующему поставщику
-                                if (!hosts.length || user.sid) service = null;
-                                else service = locator.connectServer(hosts.shift(), "root\\CIMV2");
-                            } catch (e) { service = null; };
-                        } while (service);
-                    })(service);
+                                if (!hosts.length || user.sid) cim = null;
+                                else cim = locator.connectServer(hosts.shift(), "root\\CIMV2");
+                            } catch (e) { cim = null; };
+                        } while (cim);
+                    })(cim);
                 };
                 // вычисляем характеристики из сетевого профиля
                 if (user.login) {// если нужно выполнить
-                    response = service.execQuery(
+                    response = cim.execQuery(
                         "SELECT homeDirectory" +
                         " FROM Win32_NetworkLoginProfile" +
                         " WHERE name = " + app.fun.repair(user.login)
@@ -546,7 +560,7 @@ var env = new App({
                 };
                 // вычисляем характеристики из локального профиля
                 if (!user.profile && user.sid) {// если нужно выполнить
-                    response = service.execQuery(
+                    response = cim.execQuery(
                         "SELECT localPath" +
                         " FROM Win32_UserProfile" +
                         " WHERE sid = " + app.fun.repair(user.sid)
@@ -569,7 +583,7 @@ var env = new App({
                 if (value = app.fun.clear(user.profile)) data["USR-PROFILE"] = value;
                 if (value = app.fun.clear(user.home)) data["USR-HOME"] = value;
                 // вычисляем distinguished name компьютера в active directory 
-                if (host) {// если есть идентификатор компьютера
+                if (host && ldap) {// если нужно выполнить
                     response = ldap.execQuery(
                         "SELECT DS_distinguishedName" +
                         " FROM DS_computer" +
@@ -588,7 +602,7 @@ var env = new App({
                 // вычисляем характеристики центрального процессора
                 score = 0;// обнуляем текущую оценку
                 id = "";// сбрасываем идентификатор элимента
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT architecture, maxClockSpeed, name, revision, numberOfCores, socketDesignation" +
                     " FROM Win32_Processor" +
                     " WHERE role = 'CPU'"
@@ -615,7 +629,7 @@ var env = new App({
                 if (score) benchmark = benchmark ? Math.min(benchmark, score) : score;
                 // вычисляем характеристики кеша процессора
                 id = "";// сбрасываем идентификатор элимента
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT level, maxCacheSize" +
                     " FROM Win32_CacheMemory"
                 );
@@ -630,7 +644,7 @@ var env = new App({
                 score = 0;// обнуляем текущую оценку
                 total = 0;// обнуляем значение для суммирования
                 id = "";// сбрасываем идентификатор элимента
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT capacity, speed" +
                     " FROM Win32_PhysicalMemory"
                 );
@@ -650,7 +664,7 @@ var env = new App({
                 if (score) benchmark = benchmark ? Math.min(benchmark, score) : score;
                 // вычисляем характеристики графического процессора
                 id = "";// сбрасываем идентификатор элимента
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT adapterRam, name, driverVersion, currentHorizontalResolution, currentRefreshRate, currentBitsPerPixel, currentVerticalResolution" +
                     " FROM Win32_VideoController"
                 );
@@ -676,28 +690,48 @@ var env = new App({
                 // вычисляем дисковую подсистему
                 score = 0;// обнуляем текущую оценку
                 id = "";// сбрасываем идентификатор элимента
-                response = storage.execQuery(
-                    "SELECT friendlyName, firmwareVersion, mediaType, serialNumber, size" +
-                    " FROM MSFT_PhysicalDisk"
-                );
+                if (storage) {// если удалось получить доступ к объекту                    
+                    response = storage.execQuery(
+                        "SELECT model, firmwareVersion, mediaType, serialNumber, size" +
+                        " FROM MSFT_PhysicalDisk"
+                    );
+                } else {// для поддержки старых операционных систем
+                    response = cim.execQuery(
+                        "SELECT *" +
+                        " FROM Win32_DiskDrive"
+                    );
+                };
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
                     items.moveNext();// переходим к следующему элименту
                     // определяем тип насителя
                     switch (item.mediaType) {// поддерживаемые типы
+                        // для современных операционных систем
                         case 0: key = "USB"; break;
                         case 3: key = "HDD"; break;
                         case 4: key = "SSD"; break;
                         case 5: key = "SCM"; break;
+                        // для старых операционных систем
+                        case "Removable Media":
+                            key = "USB";
+                            break;
+                        case "Fixed	hard disk media":
+                        case "Fixed hard disk media":
+                            if (item.model && -1 != item.model.indexOf("Solid")) key = "SSD";
+                            else if (item.model && -1 != item.model.indexOf("SSD")) key = "SSD";
+                            else if (item.model && !item.model.indexOf("ADATA")) key = "SSD";
+                            else key = "HDD";
+                            break;
+                        // для неизвестных типов
                         default: key = "";
                     };
                     // пропускаем непонятные и повторяющийся типы насителя
-                    if (item.friendlyName && -1 != item.friendlyName.indexOf("Raid")) continue;
+                    if (item.model && -1 != item.model.indexOf("Raid")) continue;
                     if (!key || data[key + "-NAME"]) continue;
                     // характеристики
-                    if (value = app.fun.clear(item.friendlyName, "ATA Device", "SCSI Disk Device", "USB Device", "SSD", "SATA")) data[key + "-NAME"] = value;
-                    if (value = app.fun.clear(item.firmwareVersion)) data[key + "-VERSION"] = value;
+                    if (value = app.fun.clear(item.model, "ATA Device", "SCSI Disk Device", "USB Device", "SSD", "SATA")) data[key + "-NAME"] = value;
+                    if (value = app.fun.clear(item.firmwareVersion || item.firmwareRevision)) data[key + "-VERSION"] = value;
                     if (value = app.fun.clear(item.serialNumber)) data[key + "-SERIAL"] = value;
                     if (value = item.size) data[key + "-SIZE"] = app.fun.info2str(value, 0) + "Б";
                     if (value = item.size) data[key + "-SIZE-VAL"] = value;
@@ -707,7 +741,7 @@ var env = new App({
                 if (score) benchmark = benchmark ? Math.min(benchmark, score) : score;
                 // вычисляем оптический накопитель
                 id = "";// сбрасываем идентификатор элимента
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT mediaType, caption, drive" +
                     " FROM Win32_CDROMDrive"
                 );
@@ -732,7 +766,7 @@ var env = new App({
                 };
                 // вычисляем букву диска для резервных копий
                 id = "";// сбрасываем идентификатор элимента
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT caption, size" +
                     " FROM Win32_LogicalDisk" +
                     " WHERE driveType = 2 OR driveType = 3 OR driveType = 4"
@@ -755,14 +789,16 @@ var env = new App({
                     "SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\еФарма"
                 ];
                 value = "";// сбрасываем значение переменной
-                method = registry.methods_.item("getStringValue");
-                for (var i = 0, iLen = list.length; i < iLen && !value; i++) {
-                    param = method.inParameters.spawnInstance_();
-                    param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
-                    param.sSubKeyName = list[i];
-                    param.sValueName = key;
-                    item = registry.execMethod_(method.name, param);
-                    if (!item.returnValue && item.sValue) value = app.fun.clear(item.sValue);
+                if (registry) {// если удалось получить доступ к объекту
+                    method = registry.methods_.item("getStringValue");
+                    for (var i = 0, iLen = list.length; i < iLen && !value; i++) {
+                        param = method.inParameters.spawnInstance_();
+                        param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
+                        param.sSubKeyName = list[i];
+                        param.sValueName = key;
+                        item = registry.execMethod_(method.name, param);
+                        if (!item.returnValue && item.sValue) value = app.fun.clear(item.sValue);
+                    };
                 };
                 if (value) {// если удалось получить значение
                     list = value.split(app.val.keyDelim);
@@ -782,7 +818,7 @@ var env = new App({
                     if (i) value += " OR ";// добавляем разделитель
                     value += "name = " + app.fun.repair(list[i] + key);
                 };
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT name" +
                     " FROM CIM_DataFile" +
                     " WHERE " + value
@@ -811,7 +847,7 @@ var env = new App({
                     if (i) value += " OR ";// добавляем разделитель
                     value += "name = " + app.fun.repair(list[i] + key);
                 };
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT name" +
                     " FROM CIM_DataFile" +
                     " WHERE " + value
@@ -840,7 +876,7 @@ var env = new App({
                     if (i) value += " OR ";// добавляем разделитель
                     value += "name = " + app.fun.repair(list[i] + key);
                 };
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT name" +
                     " FROM CIM_DataFile" +
                     " WHERE " + value
@@ -873,7 +909,7 @@ var env = new App({
                     value += "AND path = " + app.fun.repair(app.lib.strim(list[i], ":", "", false, false)) + " ";
                     value += "AND extension = " + app.fun.repair(key);
                 };
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT name, fileName" +
                     " FROM CIM_DataFile" +
                     " WHERE " + value
@@ -907,7 +943,7 @@ var env = new App({
                     if (i) value += " OR ";// добавляем разделитель
                     value += "name = " + app.fun.repair(list[i] + key);
                 };
-                response = service.execQuery(
+                response = cim.execQuery(
                     "SELECT name" +
                     " FROM CIM_DataFile" +
                     " WHERE " + value
@@ -935,15 +971,17 @@ var env = new App({
                     "SOFTWARE\\WOW6432Node\\Clients\\StartMenuInternet\\Google Chrome\\shell\\open\\command"
                 ];
                 value = "";// сбрасываем значение переменной
-                method = registry.methods_.item("getStringValue");
-                for (var i = 0, iLen = list.length; i < iLen && !value; i++) {
-                    param = method.inParameters.spawnInstance_();
-                    param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
-                    param.sSubKeyName = list[i];
-                    param.sValueName = key;
-                    item = registry.execMethod_(method.name, param);
-                    if (!item.returnValue && item.sValue) value = app.fun.clear(item.sValue);
-                };
+                if (registry) {// если удалось получить доступ к объекту
+                    method = registry.methods_.item("getStringValue");
+                    for (var i = 0, iLen = list.length; i < iLen && !value; i++) {
+                        param = method.inParameters.spawnInstance_();
+                        param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
+                        param.sSubKeyName = list[i];
+                        param.sValueName = key;
+                        item = registry.execMethod_(method.name, param);
+                        if (!item.returnValue && item.sValue) value = app.fun.clear(item.sValue);
+                    };
+                }
                 if (value) {// если удалось получить значение
                     list = value.split(app.val.keyDelim);
                     list.pop();// удаляем последнай элимент
@@ -959,14 +997,16 @@ var env = new App({
                     "SOFTWARE\\WOW6432Node\\VideoLAN\\VLC"
                 ];
                 value = "";// сбрасываем значение переменной
-                method = registry.methods_.item("getStringValue");
-                for (var i = 0, iLen = list.length; i < iLen && !value; i++) {
-                    param = method.inParameters.spawnInstance_();
-                    param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
-                    param.sSubKeyName = list[i];
-                    param.sValueName = key;
-                    item = registry.execMethod_(method.name, param);
-                    if (!item.returnValue && item.sValue) value = app.fun.clear(item.sValue);
+                if (registry) {// если удалось получить доступ к объекту
+                    method = registry.methods_.item("getStringValue");
+                    for (var i = 0, iLen = list.length; i < iLen && !value; i++) {
+                        param = method.inParameters.spawnInstance_();
+                        param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
+                        param.sSubKeyName = list[i];
+                        param.sValueName = key;
+                        item = registry.execMethod_(method.name, param);
+                        if (!item.returnValue && item.sValue) value = app.fun.clear(item.sValue);
+                    };
                 };
                 if (value) {// если удалось получить значение
                     list = value.split(app.val.keyDelim);
@@ -983,14 +1023,16 @@ var env = new App({
                     "SOFTWARE\\WOW6432Node\\TeamViewer"
                 ];
                 value = "";// сбрасываем значение переменной
-                method = registry.methods_.item("getDWORDValue");
-                for (var i = 0, iLen = list.length; i < iLen && !value; i++) {
-                    param = method.inParameters.spawnInstance_();
-                    param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
-                    param.sSubKeyName = list[i];
-                    param.sValueName = key;
-                    item = registry.execMethod_(method.name, param);
-                    if (!item.returnValue && item.uValue) value = app.fun.clear(item.uValue);
+                if (registry) {// если удалось получить доступ к объекту
+                    method = registry.methods_.item("getDWORDValue");
+                    for (var i = 0, iLen = list.length; i < iLen && !value; i++) {
+                        param = method.inParameters.spawnInstance_();
+                        param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
+                        param.sSubKeyName = list[i];
+                        param.sValueName = key;
+                        item = registry.execMethod_(method.name, param);
+                        if (!item.returnValue && item.uValue) value = app.fun.clear(item.uValue);
+                    };
                 };
                 if (value) {// если удалось получить значение
                     // характеристики
