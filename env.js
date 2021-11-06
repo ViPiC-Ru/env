@@ -1,4 +1,4 @@
-/* 1.0.3 определяет дополнительные переменные среды
+/* 1.1.0 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -15,6 +15,7 @@ cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ..
 <option>    - Дополнительные опции (может быть несколько, порядок не важен).
     silent  - Последующие команды выполнить без отображения.
     nowait  - Последующие команды выполнить без ожидания.
+    debug   - Ввести в стандартный поток ошибок отладочную информацию.
 
 */
 
@@ -164,7 +165,44 @@ var env = new App({
             repair: function (value) {
                 value = "'" + (value ? value : "") + "'";
                 return value.replace(/\\/g, "\\\\");
-            }
+            },
+
+            /**
+             * Выводит отладочную информацию на экран.
+             * @param {string} value - Служебная информация.
+             * @returns {string} Служебная информация.
+             */
+
+            debug: (function () {
+                var list, before, time = {}, count = -1;
+
+                return function (value) {
+                    // выводим отладочную информацию
+                    if (time.first) {// если включена отладка
+                        // формируем первую часть
+                        list = [app.lib.strPad(count, 3, "0", "left")];
+                        list.push("|");// разделитель блоков
+                        list.push(app.lib.strPad(app.lib.num2str((time.now.valueOf() - time.first.valueOf()) / 1000, 3, ".", ""), 7, "0", "left"));
+                        // смешвем время в текущую итерацию
+                        time.last = time.now;// сохраняем время вызова
+                        time.now = new Date();// сохраняем текущее время
+                        // формируем вторую часть
+                        list.push("+" + app.lib.strPad(app.lib.num2str((time.now.valueOf() - time.last.valueOf()) / 1000, 3, ".", ""), 7, "0", "left"));
+                        list.push("|");// разделитель блоков
+                        list.push(before);// отладочное сообщение
+                        // выводим информацию на экран
+                        try {// пробуем отправить данные
+                            wsh.stdErr.writeLine(list.join(" "));
+                        } catch (e) { };// игнорируем исключения
+                    } else time.now = new Date();
+                    // сохраняем текущее состояние
+                    if (!count && before) time.first = time.now;
+                    before = value;// сохраняем сообщение
+                    count++;// увеличиваем счётчик
+                    // возвращаем переданное значение
+                    return value;
+                };
+            })()
         },
         init: function () {// функция инициализации приложения
             var shell, key, value, list, locator, cim, ldap, storage, registry, mode,
@@ -228,6 +266,13 @@ var env = new App({
                         continue;// переходим к следующему параметру
                     };
                 };
+                // режим отладки
+                if (!("debug" in config)) {// если нет в конфигурации
+                    if ("debug" == value) {// если пройдена основная проверка
+                        config.debug = true;// задаём значение
+                        continue;// переходим к следующему параметру
+                    };
+                };
                 // если закончились параметры конфигурации
                 break;// остававливаем получние параметров
             };
@@ -239,7 +284,9 @@ var env = new App({
             shell = new ActiveXObject("WScript.Shell");
             locator = new ActiveXObject("wbemScripting.Swbemlocator");
             locator.security_.impersonationLevel = 3;// Impersonate
+            app.fun.debug(config.debug);// если это необходимо включаем отладочный режим
             if (config.context) {// если есть контекст выполнения
+                app.fun.debug("Connect and create objects");
                 for (var index = 1; index; index++) {
                     try {// пробуем подключиться к компьютеру
                         switch (index) {// последовательно создаём объекты
@@ -267,7 +314,7 @@ var env = new App({
                     param = method.inParameters.spawnInstance_();
                     param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
                     param.sSubKeyName = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
-                    param.sValueName = "DigitalProductId";
+                    param.sValueName = app.fun.debug("DigitalProductId");
                     item = registry.execMethod_(method.name, param);
                     if (!item.returnValue) {// если удалось прочитать значение
                         value = app.fun.bin2key(item.uValue);// преобразовываем значение ключа
@@ -278,11 +325,11 @@ var env = new App({
                 };
                 // вычисляем характеристики операционной системы
                 id = "";// сбрасываем идентификатор элимента
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT *" +
                     " FROM Win32_OperatingSystem" +
                     " WHERE primary = TRUE"
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -307,11 +354,11 @@ var env = new App({
                 };
                 // вычисляем характеристики материнской платы
                 id = "";// сбрасываем идентификатор элимента
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT manufacturer, product, serialNumber" +
                     " FROM Win32_BaseBoard" +
                     " WHERE hostingBoard = TRUE"
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -325,11 +372,11 @@ var env = new App({
                 };
                 // вычисляем характеристики basic input/output system
                 id = "";// сбрасываем идентификатор элимента
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT releaseDate, manufacturer, smBIOSBIOSVersion, serialNumber" +
                     " FROM Win32_BIOS" +
                     " WHERE primaryBIOS = TRUE"
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -345,11 +392,11 @@ var env = new App({
                 };
                 // вычисляем характеристики сетевого соединения
                 id = "";// сбрасываем идентификатор элимента
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT *" +
                     " FROM Win32_NetworkAdapterConfiguration" +
                     " WHERE ipEnabled = TRUE"
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -400,12 +447,12 @@ var env = new App({
                 };
                 // вычисляем характеристики сетевого адаптера
                 score = 0;// обнуляем текущую оценку
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT speed, timeOfLastReset" +
                     " FROM Win32_NetworkAdapter" +
                     " WHERE netEnabled = TRUE" +
                     " AND interfaceIndex = " + app.fun.repair(id)
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -420,10 +467,10 @@ var env = new App({
                 };
                 if (score) benchmark = benchmark ? Math.min(benchmark, score) : score;
                 // вычисляем дополнительные характеристики
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT *" +
                     " FROM Win32_ComputerSystem"
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -451,7 +498,7 @@ var env = new App({
                     param = method.inParameters.spawnInstance_();
                     param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
                     param.sSubKeyName = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon";
-                    param.sValueName = "DefaultDomainName";
+                    param.sValueName = app.fun.debug("DefaultDomainName");
                     item = registry.execMethod_(method.name, param);
                     if (!item.returnValue && item.sValue) list.push(item.sValue);
                     // вычисляем домен пользователя поумолчанию
@@ -459,7 +506,7 @@ var env = new App({
                     param = method.inParameters.spawnInstance_();
                     param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
                     param.sSubKeyName = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon";
-                    param.sValueName = "DefaultUserName";
+                    param.sValueName = app.fun.debug("DefaultUserName");
                     item = registry.execMethod_(method.name, param);
                     if (!item.returnValue && item.sValue) list.push(item.sValue);
                     // формируем идентификатор пользователя
@@ -470,11 +517,11 @@ var env = new App({
                 // вычисляем характеристики из локального профиля
                 if (!user.login) {// если идентификатор пользователя неопределён
                     unit = null;// сбрасываем значение
-                    response = cim.execQuery(
+                    response = cim.execQuery(app.fun.debug(
                         "SELECT lastUseTime, localPath, loaded" +
                         " FROM Win32_UserProfile" +
                         " WHERE special = FALSE"
-                    );
+                    ));
                     items = new Enumerator(response);
                     while (!items.atEnd()) {// пока не достигнут конец
                         item = items.item();// получаем очередной элимент коллекции
@@ -497,12 +544,12 @@ var env = new App({
                     (function (cim) {// замыкаем для локальных переменных
                         hosts = [".", domain];// список альтернативных поставщиков
                         do {// пробигаемся по поставщикам данных
-                            response = cim.execQuery(
+                            response = cim.execQuery(app.fun.debug(
                                 "SELECT domain, name, fullName, sid" +
                                 " FROM Win32_UserAccount" +
                                 " WHERE name = " + app.fun.repair(user.account) +
                                 (user.domain ? " AND domain = " + app.fun.repair(user.domain) : "")
-                            );
+                            ));
                             items = new Enumerator(response);
                             while (!items.atEnd()) {// пока не достигнут конец
                                 item = items.item();// получаем очередной элимент коллекции
@@ -543,11 +590,11 @@ var env = new App({
                 };
                 // вычисляем характеристики из сетевого профиля
                 if (user.login) {// если нужно выполнить
-                    response = cim.execQuery(
+                    response = cim.execQuery(app.fun.debug(
                         "SELECT homeDirectory" +
                         " FROM Win32_NetworkLoginProfile" +
                         " WHERE name = " + app.fun.repair(user.login)
-                    );
+                    ));
                     items = new Enumerator(response);
                     while (!items.atEnd()) {// пока не достигнут конец
                         item = items.item();// получаем очередной элимент коллекции
@@ -560,11 +607,11 @@ var env = new App({
                 };
                 // вычисляем характеристики из локального профиля
                 if (!user.profile && user.sid) {// если нужно выполнить
-                    response = cim.execQuery(
+                    response = cim.execQuery(app.fun.debug(
                         "SELECT localPath" +
                         " FROM Win32_UserProfile" +
                         " WHERE sid = " + app.fun.repair(user.sid)
-                    );
+                    ));
                     items = new Enumerator(response);
                     while (!items.atEnd()) {// пока не достигнут конец
                         item = items.item();// получаем очередной элимент коллекции
@@ -583,12 +630,12 @@ var env = new App({
                 if (value = app.fun.clear(user.profile)) data["USR-PROFILE"] = value;
                 if (value = app.fun.clear(user.home)) data["USR-HOME"] = value;
                 // вычисляем distinguished name компьютера в active directory 
-                if (host && ldap) {// если нужно выполнить
-                    response = ldap.execQuery(
+                if (host && ldap && domain) {// если нужно выполнить
+                    response = ldap.execQuery(app.fun.debug(
                         "SELECT DS_distinguishedName" +
                         " FROM DS_computer" +
                         " WHERE DS_cn = " + app.fun.repair(host)
-                    );
+                    ));
                     items = new Enumerator(response);
                     while (!items.atEnd()) {// пока не достигнут конец
                         item = items.item();// получаем очередной элимент коллекции
@@ -602,11 +649,11 @@ var env = new App({
                 // вычисляем характеристики центрального процессора
                 score = 0;// обнуляем текущую оценку
                 id = "";// сбрасываем идентификатор элимента
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT architecture, maxClockSpeed, name, revision, numberOfCores, socketDesignation" +
                     " FROM Win32_Processor" +
                     " WHERE role = 'CPU'"
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -629,10 +676,10 @@ var env = new App({
                 if (score) benchmark = benchmark ? Math.min(benchmark, score) : score;
                 // вычисляем характеристики кеша процессора
                 id = "";// сбрасываем идентификатор элимента
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT level, maxCacheSize" +
                     " FROM Win32_CacheMemory"
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -644,10 +691,10 @@ var env = new App({
                 score = 0;// обнуляем текущую оценку
                 total = 0;// обнуляем значение для суммирования
                 id = "";// сбрасываем идентификатор элимента
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT capacity, speed" +
                     " FROM Win32_PhysicalMemory"
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -664,10 +711,10 @@ var env = new App({
                 if (score) benchmark = benchmark ? Math.min(benchmark, score) : score;
                 // вычисляем характеристики графического процессора
                 id = "";// сбрасываем идентификатор элимента
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT adapterRam, name, driverVersion, currentHorizontalResolution, currentRefreshRate, currentBitsPerPixel, currentVerticalResolution" +
                     " FROM Win32_VideoController"
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -691,15 +738,15 @@ var env = new App({
                 score = 0;// обнуляем текущую оценку
                 id = "";// сбрасываем идентификатор элимента
                 if (storage) {// если удалось получить доступ к объекту                    
-                    response = storage.execQuery(
+                    response = storage.execQuery(app.fun.debug(
                         "SELECT model, firmwareVersion, mediaType, serialNumber, size" +
                         " FROM MSFT_PhysicalDisk"
-                    );
+                    ));
                 } else {// для поддержки старых операционных систем
-                    response = cim.execQuery(
+                    response = cim.execQuery(app.fun.debug(
                         "SELECT *" +
                         " FROM Win32_DiskDrive"
-                    );
+                    ));
                 };
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
@@ -741,10 +788,10 @@ var env = new App({
                 if (score) benchmark = benchmark ? Math.min(benchmark, score) : score;
                 // вычисляем оптический накопитель
                 id = "";// сбрасываем идентификатор элимента
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT mediaType, caption, drive" +
                     " FROM Win32_CDROMDrive"
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -766,11 +813,11 @@ var env = new App({
                 };
                 // вычисляем букву диска для резервных копий
                 id = "";// сбрасываем идентификатор элимента
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT caption, size" +
                     " FROM Win32_LogicalDisk" +
                     " WHERE driveType = 2 OR driveType = 3 OR driveType = 4"
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -794,7 +841,7 @@ var env = new App({
                     for (var i = 0, iLen = list.length; i < iLen && !value; i++) {
                         param = method.inParameters.spawnInstance_();
                         param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
-                        param.sSubKeyName = list[i];
+                        param.sSubKeyName = app.fun.debug(list[i]);
                         param.sValueName = key;
                         item = registry.execMethod_(method.name, param);
                         if (!item.returnValue && item.sValue) value = app.fun.clear(item.sValue);
@@ -818,11 +865,11 @@ var env = new App({
                     if (i) value += " OR ";// добавляем разделитель
                     value += "name = " + app.fun.repair(list[i] + key);
                 };
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT name" +
                     " FROM CIM_DataFile" +
                     " WHERE " + value
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -847,11 +894,11 @@ var env = new App({
                     if (i) value += " OR ";// добавляем разделитель
                     value += "name = " + app.fun.repair(list[i] + key);
                 };
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT name" +
                     " FROM CIM_DataFile" +
                     " WHERE " + value
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -876,11 +923,11 @@ var env = new App({
                     if (i) value += " OR ";// добавляем разделитель
                     value += "name = " + app.fun.repair(list[i] + key);
                 };
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT name" +
                     " FROM CIM_DataFile" +
                     " WHERE " + value
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -909,11 +956,11 @@ var env = new App({
                     value += "AND path = " + app.fun.repair(app.lib.strim(list[i], ":", "", false, false)) + " ";
                     value += "AND extension = " + app.fun.repair(key);
                 };
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT name, fileName" +
                     " FROM CIM_DataFile" +
                     " WHERE " + value
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -943,11 +990,11 @@ var env = new App({
                     if (i) value += " OR ";// добавляем разделитель
                     value += "name = " + app.fun.repair(list[i] + key);
                 };
-                response = cim.execQuery(
+                response = cim.execQuery(app.fun.debug(
                     "SELECT name" +
                     " FROM CIM_DataFile" +
                     " WHERE " + value
-                );
+                ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
@@ -976,7 +1023,7 @@ var env = new App({
                     for (var i = 0, iLen = list.length; i < iLen && !value; i++) {
                         param = method.inParameters.spawnInstance_();
                         param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
-                        param.sSubKeyName = list[i];
+                        param.sSubKeyName = app.fun.debug(list[i]);
                         param.sValueName = key;
                         item = registry.execMethod_(method.name, param);
                         if (!item.returnValue && item.sValue) value = app.fun.clear(item.sValue);
@@ -1002,7 +1049,7 @@ var env = new App({
                     for (var i = 0, iLen = list.length; i < iLen && !value; i++) {
                         param = method.inParameters.spawnInstance_();
                         param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
-                        param.sSubKeyName = list[i];
+                        param.sSubKeyName = app.fun.debug(list[i]);
                         param.sValueName = key;
                         item = registry.execMethod_(method.name, param);
                         if (!item.returnValue && item.sValue) value = app.fun.clear(item.sValue);
@@ -1028,7 +1075,7 @@ var env = new App({
                     for (var i = 0, iLen = list.length; i < iLen && !value; i++) {
                         param = method.inParameters.spawnInstance_();
                         param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
-                        param.sSubKeyName = list[i];
+                        param.sSubKeyName = app.fun.debug(list[i]);
                         param.sValueName = key;
                         item = registry.execMethod_(method.name, param);
                         if (!item.returnValue && item.uValue) value = app.fun.clear(item.uValue);
@@ -1068,6 +1115,7 @@ var env = new App({
             // получаем данные с потока ввода
             if (config.input) {// если нужно получить данные
                 // получаем текстовые данные из потока
+                app.fun.debug("Read input data");
                 try {// пробуем получить данные
                     key = "windows-1251";
                     value = wsh.stdIn.readAll();
@@ -1119,6 +1167,7 @@ var env = new App({
             if (config.output) {// если нужно вывести данные
                 lines = [];// сбрасываем массив строк
                 delim = "";// сбрасываем разделитель значений
+                app.fun.debug("Write output data");
                 switch (config.output) {// поддерживаемые служебные параметры
                     case "ini":// значения для формата ini
                         delim = app.val.argDelim + app.val.iniDelim + app.val.argDelim;
@@ -1173,6 +1222,7 @@ var env = new App({
                 } catch (e) { };// игнорируем исключения
             };
             // добавляем новые переменные во временное окружение
+            app.fun.debug("Set environment variables");
             items = shell.environment(app.val.envType);
             for (var key in data) {// пробигаемся по списку с данными
                 value = data[key];// получаем очередное значение
@@ -1193,6 +1243,7 @@ var env = new App({
             // вызываем командную строку
             if (command) {// если есть команда
                 mode = !config.silent ? app.val.runStyle : 0;
+                app.fun.debug("Calling an external command");
                 try {// пробуем выполнить команду
                     value = shell.run(command, mode, !config.nowait);
                     if (config.nowait) value = app.val.defReturn;
@@ -1201,6 +1252,8 @@ var env = new App({
                 };
             } else value = app.val.defReturn;
             // завершаем сценарий кодом
+            app.fun.debug("Exit with code " + value);
+            app.fun.debug(config.debug);
             wsh.quit(value);
         }
     });
