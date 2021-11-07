@@ -1,4 +1,4 @@
-/* 1.2.0 определяет дополнительные переменные среды
+/* 1.2.1 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -178,7 +178,7 @@ var env = new App({
                 for (var i = 1, iLen = arguments.length; i < iLen; i++) {
                     value = value.replace(arguments[i], "");
                 };
-                // очищаем по регулярному вырожению
+                // очищаем по регулярным выражениям
                 return value
                     .replace(/\(R\)/gi, "")                     // символ патента
                     .replace(/\(Registered Trademark\)/gi, "")  // тарговая марка
@@ -187,6 +187,7 @@ var env = new App({
                     .replace(/\(Майкрософт\)/gi, "")            // тарговая марка
                     .replace(/\(TM\)/gi, "")                    // символ тарговой марки
                     .replace(/^[/'"]|[/"']$/g, "")              // лишние символы по бокам
+                    .replace(/\r\n|\n|\t/g, " ")                // переводы строк и табуляции
                     .replace(/^\s+|\s+$/g, "")                  // пробельные символы в начале и в конце
                     .replace(/\.+$/, "")                        // точки в конце строки
                     .replace(/\s(?=\s)/gi, "")                  // лишнии пробельные символы
@@ -355,9 +356,7 @@ var env = new App({
                     item = registry.execMethod_(method.name, param);
                     if (!item.returnValue) {// если удалось прочитать значение
                         value = app.fun.bin2key(item.uValue);// преобразовываем значение ключа
-                        if (value && "BBBBB-BBBBB-BBBBB-BBBBB-BBBBB" != value) {// если ключ не пуст
-                            data["SYS-KEY"] = value;
-                        };
+                        if(value = app.fun.clear(value, "BBBBB-BBBBB-BBBBB-BBBBB-BBBBB")) data["SYS-KEY"] = value;
                     };
                 };
                 // вычисляем характеристики операционной системы
@@ -747,7 +746,7 @@ var env = new App({
                     if (value = item.maxClockSpeed) data["CPU-SPEED-VAL"] = value * 1000 * 1000;
                     if (value = app.fun.clear(item.name, "CPU", "APU", "Процессор", "Processor", "with", "Radeon HD Graphics", "11th Gen")) data["CPU-NAME"] = value;
                     if (value = app.fun.clear(item.revision)) data["CPU-VERSION"] = value;
-                    if (value = item.numberOfCores) data["CPU-CORE"] = value;
+                    if (value = app.fun.clear(item.numberOfCores)) data["CPU-CORE"] = value;
                     if (value = app.fun.clear(item.socketDesignation, "SOCKET 0")) data["CPU-SOCKET"] = value;
                     // косвенно считаем производительность
                     if (value = item.maxClockSpeed) score += 2.26143 * Math.sqrt(value / 1000);
