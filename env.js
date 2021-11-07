@@ -1,4 +1,4 @@
-/* 1.1.0 определяет дополнительные переменные среды
+/* 1.2.0 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -97,6 +97,43 @@ var env = new App({
                     key.substr(15, 5),
                     key.substr(20, 5)
                 ].join("-");
+            },
+
+            /**
+             * Преобразовывает бинарные данные в идентификатор безопасности.
+             * @param {binary} bin - Бинарные данные идентификатора безопасности.
+             * @returns {string} Строковое значение идентификатора безопасности.
+             */
+
+            bin2sid: function (bin) {
+                var list, revision, authority, subAuthority, count,
+                    offset, size, id = "S", delim = "-", sid = "";
+
+                list = bin.toArray();
+                // 0 байт - номер редакции
+                revision = list[0] & 255;
+                sid += id + delim + revision;
+                // 1 байт - колличество дополнительных блоков
+                count = list[1] & 255;
+                // 2 - 7 байты - 48 битный основной блок [Big-Endian]
+                authority = 0;// сбрасываем значение
+                for (var i = 2; i <= 7; i++) {// пробигаемся по байтам
+                    authority += (list[i] & 255) * (1 << 8 * (5 - (i - 2)));
+                };
+                sid += delim + authority;
+                // 32 битные дополнительные блоки [Little-Endian]
+                size = 4; // 4 байта для каждого дополнительного блока
+                offset = 8;// задаём начальное смещение
+                for (var i = 0; i < count; i++) {// пробигаемся по блокам
+                    subAuthority = 0;// сбрасываем значение
+                    for (var j = 0; j < size; j++) {// пробигаемся по байтам
+                        subAuthority += (list[offset + j] & 255) * (1 << 8 * j);
+                    };
+                    sid += delim + subAuthority;
+                    offset += size;
+                };
+                // возвращаем результат
+                return sid;
             },
 
             /**
@@ -291,7 +328,7 @@ var env = new App({
                     try {// пробуем подключиться к компьютеру
                         switch (index) {// последовательно создаём объекты
                             case 1: cim = locator.connectServer(config.context, "root\\CIMV2"); break;
-                            case 2: ldap = locator.connectServer(config.context, "root\\directory\\LDAP"); break;
+                            case 2: ldap = locator.connectServer(".", "root\\directory\\LDAP"); break;
                             case 3: storage = locator.connectServer(config.context, "root\\Microsoft\\Windows\\Storage"); break;
                             case 4: registry = locator.connectServer(config.context, "root\\default").get("stdRegProv"); break;
                             default: index = -1;// завершаем создание
@@ -401,7 +438,7 @@ var env = new App({
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
                     items.moveNext();// переходим к следующему элименту
-                    if (value = item.interfaceIndex) id = value;
+                    if (value = item.index) id = value;
                     // основной адрес 
                     if (null != item.ipAddress) {// если есть список ip адресов
                         list = item.ipAddress.toArray();// получаем очередной список
@@ -451,7 +488,7 @@ var env = new App({
                     "SELECT speed, timeOfLastReset" +
                     " FROM Win32_NetworkAdapter" +
                     " WHERE netEnabled = TRUE" +
-                    " AND interfaceIndex = " + app.fun.repair(id)
+                    " AND deviceID = " + app.fun.repair(id)
                 ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
@@ -480,8 +517,8 @@ var env = new App({
                     if (item.domain != item.workgroup) domain = item.domain;
                     // формируем идентификатор пользователя
                     if (value = item.userName) user.domain = value.split(app.val.keyDelim)[0];
-                    if (value = item.userName) user.account = value.split(app.val.keyDelim)[1];
-                    if (value = item.userName) user.login = value;
+                    if (value = item.userName) user.login = value.split(app.val.keyDelim)[1];
+                    if (value = item.userName) user.account = value;
                     // характеристики
                     if (value = app.fun.clear(host)) data["NET-HOST"] = value;
                     if (value = app.fun.clear(item.domain)) data["NET-DOMAIN"] = value;
@@ -491,7 +528,7 @@ var env = new App({
                     break;
                 };
                 // для поддержки старых операционных систем
-                if (!user.login && registry) {// если нужно выполнить
+                if (!user.account && registry) {// если нужно выполнить
                     list = [];// сбрасываем список значений
                     // вычисляем имя пользователя поумолчанию
                     method = registry.methods_.item("getStringValue");
@@ -511,14 +548,14 @@ var env = new App({
                     if (!item.returnValue && item.sValue) list.push(item.sValue);
                     // формируем идентификатор пользователя
                     if (2 == list.length) user.domain = list[0];
-                    if (2 == list.length) user.account = list[1];
-                    if (2 == list.length) user.login = list.join(app.val.keyDelim);
+                    if (2 == list.length) user.login = list[1];
+                    if (2 == list.length) user.account = list.join(app.val.keyDelim);
                 };
                 // вычисляем характеристики из локального профиля
-                if (!user.login) {// если идентификатор пользователя неопределён
+                if (!user.account) {// если идентификатор пользователя неопределён
                     unit = null;// сбрасываем значение
                     response = cim.execQuery(app.fun.debug(
-                        "SELECT lastUseTime, localPath, loaded" +
+                        "SELECT lastUseTime, localPath, loaded, sid" +
                         " FROM Win32_UserProfile" +
                         " WHERE special = FALSE"
                     ));
@@ -535,78 +572,108 @@ var env = new App({
                     };
                     if (item = unit) {// если есть подходящий элимент
                         // формируем идентификатор пользователя
-                        if (value = item.localPath.split(app.val.keyDelim).pop()) user.account = value;
-                        if (value = item.localPath) user.profile = value;
+                        user.profile = item.localPath;
+                        if (value = item.sid) user.sid = value;
                     };
                 };
-                // вычисляем характеристики пользователя
-                if (user.account) {// если идентификатор пользователя определён
-                    (function (cim) {// замыкаем для локальных переменных
-                        hosts = [".", domain];// список альтернативных поставщиков
-                        do {// пробигаемся по поставщикам данных
-                            response = cim.execQuery(app.fun.debug(
-                                "SELECT domain, name, fullName, sid" +
-                                " FROM Win32_UserAccount" +
-                                " WHERE name = " + app.fun.repair(user.account) +
-                                (user.domain ? " AND domain = " + app.fun.repair(user.domain) : "")
-                            ));
-                            items = new Enumerator(response);
-                            while (!items.atEnd()) {// пока не достигнут конец
-                                item = items.item();// получаем очередной элимент коллекции
-                                items.moveNext();// переходим к следующему элименту
-                                // характеристики
-                                if (value = app.fun.clear(item.fullName)) data["USR-NAME"] = value;
-                                if (value = app.fun.clear(item.fullName)) {// если получено значение
-                                    list = value.split(app.val.argDelim);// рабзиваем на фрагменты
-                                    for (var i = list.length - 1; i > -1; i--) {// пробигаемся по списку
-                                        value = app.fun.clear(list[i], /[\[\(,\.\)\]]/g);
-                                        isEmpty = value.length < 3;// считать ли это значение пустым
-                                        isEmpty = isEmpty || app.lib.hasValue(["von"], value, true);
-                                        if (isEmpty) list.splice(i, 1);
-                                        else list[i] = value;
-                                    };
-                                    if (value = list[0]) data["USR-NAME-FIRST"] = value;
-                                    if (value = list[1]) data["USR-NAME-SECOND"] = value;
-                                    if (value = list[2]) data["USR-NAME-THIRD"] = value;
-                                    if (value = list[3]) data["USR-NAME-FOURTH"] = value;
-                                };
-                                // формируем идентификатор пользователя
-                                list = [];// сбрасываем список значений
-                                if (value = item.sid) user.sid = value;
-                                if (value = item.domain) list.push(value);
-                                if (value = item.name) list.push(value);
-                                if (2 == list.length) user.domain = list[0];
-                                if (2 == list.length) user.account = list[1];
-                                if (2 == list.length) user.login = list.join(app.val.keyDelim);
-                                // останавливаемся на первом элименте
-                                break;
-                            };
-                            try {// пробуем подключиться к следующему поставщику
-                                if (!hosts.length || user.sid) cim = null;
-                                else cim = locator.connectServer(hosts.shift(), "root\\CIMV2");
-                            } catch (e) { cim = null; };
-                        } while (cim);
-                    })(cim);
+                // вычисляем характеристики из sid
+                if (!user.account && user.sid) {// если нужно выполнить
+                    list = [];// сбрасываем список значений
+                    // получаем вспомогательный объект
+                    try {// пробуем получить данные
+                        item = cim.get('Win32_SID.SID="' + user.sid + '"');
+                    } catch (e) {// при возникновении ошибки
+                        item = null;
+                    };
+                    // вычисляем имя и домен пользователя
+                    if (value = item.referencedDomainName) list.push(value);
+                    if (value = item.accountName) list.push(value);
+                    // формируем идентификатор пользователя
+                    if (2 == list.length) user.domain = list[0];
+                    if (2 == list.length) user.login = list[1];
+                    if (2 == list.length) user.account = list.join(app.val.keyDelim);
+                };
+                // вычисляем характеристики локального пользователя
+                if (user.account && app.lib.hasValue([".", host], user.domain, false)) {// если нужно выполнить
+                    response = cim.execQuery(app.fun.debug(
+                        "SELECT domain, name, fullName, sid" +
+                        " FROM Win32_UserAccount" +
+                        " WHERE name = " + app.fun.repair(user.login) +
+                        " AND domain = " + app.fun.repair(user.domain)
+                    ));
+                    items = new Enumerator(response);
+                    while (!items.atEnd()) {// пока не достигнут конец
+                        item = items.item();// получаем очередной элимент коллекции
+                        items.moveNext();// переходим к следующему элименту
+                        list = [];// сбрасываем список значений
+                        // характеристики
+                        user.name = item.fullName;
+                        if (value = item.sid) user.sid = value;
+                        // вычисляем имя и домен пользователя
+                        if (value = item.domain) list.push(value);
+                        if (value = item.name) list.push(value);
+                        // формируем идентификатор пользователя
+                        if (2 == list.length) user.domain = list[0];
+                        if (2 == list.length) user.login = list[1];
+                        if (2 == list.length) user.account = list.join(app.val.keyDelim);
+                        // останавливаемся на первом элименте
+                        break;
+                    };
+                };
+                // вычисляем характеристики доменного пользователя
+                if (user.account && ldap && !app.lib.hasValue([".", host], user.domain, false)) {// если нужно выполнить
+                    list = [// список запрашиваемых аттрибутов
+                        "DS_co", "DS_c", "DS_company", "DS_displayName", "DS_department", "DS_info",
+                        "DS_homeDirectory", "DS_l", "DS_mail", "DS_mobile", "DS_objectSid",
+                        "DS_telephoneNumber", "DS_title", "DS_distinguishedName"
+                    ];
+                    response = ldap.execQuery(app.fun.debug(
+                        "SELECT " + list.join(", ") +
+                        " FROM DS_user" +
+                        " WHERE DS_sAMAccountName = " + app.fun.repair(user.login)
+                    ));
+                    items = new Enumerator(response);
+                    while (!items.atEnd()) {// пока не достигнут конец
+                        item = items.item();// получаем очередной элимент коллекции
+                        items.moveNext();// переходим к следующему элименту
+                        // характеристики
+                        user.name = item.DS_displayName;
+                        user.home = item.DS_homeDirectory;
+                        if (unit = item.DS_objectSid) user.sid = app.fun.bin2sid(unit.value);
+                        if (value = app.fun.clear(item.DS_co)) data["USR-COUNTRY"] = value;
+                        if (value = app.fun.clear(item.DS_c)) data["USR-COUNTRY-ID"] = value;
+                        if (value = app.fun.clear(item.DS_company)) data["USR-COMPANY"] = value;
+                        if (value = app.fun.clear(item.DS_department)) data["USR-DEPARTMENT"] = value;
+                        if (value = app.fun.clear(item.DS_distinguishedName)) data["USR-ACCOUNT-DN"] = value;
+                        if (value = app.fun.clear(item.DS_l)) data["USR-CITY"] = value;
+                        if (value = app.fun.clear(item.DS_mail)) data["USR-EMAIL"] = value;
+                        if (value = app.fun.clear(item.DS_mobile)) data["USR-MOBILE"] = value;
+                        if (value = app.fun.clear(item.DS_telephoneNumber)) data["USR-PHONE"] = value;
+                        if (value = app.fun.clear(item.DS_title)) data["USR-POSITION"] = value;
+                        if (value = app.fun.clear(item.DS_info)) data["USR-INFO"] = value;
+                        // останавливаемся на первом элименте
+                        break;
+                    };
                 };
                 // вычисляем характеристики из сетевого профиля
-                if (user.login) {// если нужно выполнить
+                if (user.account && !("home" in user)) {// если нужно выполнить
                     response = cim.execQuery(app.fun.debug(
                         "SELECT homeDirectory" +
                         " FROM Win32_NetworkLoginProfile" +
-                        " WHERE name = " + app.fun.repair(user.login)
+                        " WHERE name = " + app.fun.repair(user.account)
                     ));
                     items = new Enumerator(response);
                     while (!items.atEnd()) {// пока не достигнут конец
                         item = items.item();// получаем очередной элимент коллекции
                         items.moveNext();// переходим к следующему элименту
                         // формируем идентификатор пользователя
-                        if (value = item.homeDirectory) user.home = value;
+                        user.home = item.homeDirectory;
                         // останавливаемся на первом элименте
                         break;
                     };
                 };
                 // вычисляем характеристики из локального профиля
-                if (!user.profile && user.sid) {// если нужно выполнить
+                if (user.sid && !("profile" in user)) {// если нужно выполнить
                     response = cim.execQuery(app.fun.debug(
                         "SELECT localPath" +
                         " FROM Win32_UserProfile" +
@@ -617,18 +684,33 @@ var env = new App({
                         item = items.item();// получаем очередной элимент коллекции
                         items.moveNext();// переходим к следующему элименту
                         // формируем идентификатор пользователя
-                        if (value = item.localPath) user.profile = value;
+                        user.profile = item.localPath;
                         // останавливаемся на первом элименте
                         break;
                     };
                 };
                 // заполняем сводную информацию по пользователю
                 if (value = app.fun.clear(user.sid)) data["USR-SID"] = value;
+                if (value = app.fun.clear(user.account)) data["USR-ACCOUNT"] = value;
                 if (value = app.fun.clear(user.login)) data["USR-LOGIN"] = value;
                 if (value = app.fun.clear(user.domain)) data["USR-DOMAIN"] = value;
-                if (value = app.fun.clear(user.account)) data["USR-ACCOUNT"] = value;
                 if (value = app.fun.clear(user.profile)) data["USR-PROFILE"] = value;
                 if (value = app.fun.clear(user.home)) data["USR-HOME"] = value;
+                if (value = app.fun.clear(user.name)) data["USR-NAME"] = value;
+                if (value = app.fun.clear(user.name)) {// если получено значение
+                    list = value.split(app.val.argDelim);// рабзиваем на фрагменты
+                    for (var i = list.length - 1; i > -1; i--) {// пробигаемся по списку
+                        value = app.fun.clear(list[i], /[\[\(,\.\)\]]/g);
+                        isEmpty = value.length < 3;// считать ли это значение пустым
+                        isEmpty = isEmpty || app.lib.hasValue(["von"], value, true);
+                        if (isEmpty) list.splice(i, 1);
+                        else list[i] = value;
+                    };
+                    if (value = list[0]) data["USR-NAME-FIRST"] = value;
+                    if (value = list[1]) data["USR-NAME-SECOND"] = value;
+                    if (value = list[2]) data["USR-NAME-THIRD"] = value;
+                    if (value = list[3]) data["USR-NAME-FOURTH"] = value;
+                };
                 // вычисляем distinguished name компьютера в active directory 
                 if (host && ldap && domain) {// если нужно выполнить
                     response = ldap.execQuery(app.fun.debug(
@@ -857,98 +939,112 @@ var env = new App({
                 };
                 // ищем путь до клиента eFarma
                 key = "\\Client\\ePlus.Client.exe";
-                list = [// список путей для проверки
-                    id
-                ];
+                if (id) {// если есть идентификатор для списка
+                    list = [// список путей для проверки
+                        id
+                    ];
+                } else list = [];
                 value = "";// сбрасываем значение для запроса
                 for (var i = 0, iLen = list.length; i < iLen; i++) {
                     if (i) value += " OR ";// добавляем разделитель
                     value += "name = " + app.fun.repair(list[i] + key);
                 };
-                response = cim.execQuery(app.fun.debug(
-                    "SELECT name" +
-                    " FROM CIM_DataFile" +
-                    " WHERE " + value
-                ));
-                items = new Enumerator(response);
-                while (!items.atEnd()) {// пока не достигнут конец
-                    item = items.item();// получаем очередной элимент коллекции
-                    items.moveNext();// переходим к следующему элименту
-                    for (var i = 0, iLen = list.length; i < iLen; i++) {
-                        value = list[i] + key;// конечное значение
-                        if (item.name && item.name.toLowerCase() == value.toLowerCase()) {
-                            // характеристики
-                            data["APP-EFARMA-CLIENT"] = value;
-                            // останавливаемся на первом элименте
-                            break;
+                if (value) {// если удалось сформировать значение
+                    response = cim.execQuery(app.fun.debug(
+                        "SELECT name" +
+                        " FROM CIM_DataFile" +
+                        " WHERE " + value
+                    ));
+                    items = new Enumerator(response);
+                    while (!items.atEnd()) {// пока не достигнут конец
+                        item = items.item();// получаем очередной элимент коллекции
+                        items.moveNext();// переходим к следующему элименту
+                        for (var i = 0, iLen = list.length; i < iLen; i++) {
+                            value = list[i] + key;// конечное значение
+                            if (item.name && item.name.toLowerCase() == value.toLowerCase()) {
+                                // характеристики
+                                data["APP-EFARMA-CLIENT"] = value;
+                                // останавливаемся на первом элименте
+                                break;
+                            };
                         };
                     };
                 };
                 // ищем путь до кассы eFarma
                 key = "\\ARM\\ePlus.ARMCasherNew.exe";
-                list = [// список путей для проверки
-                    id
-                ];
+                if (id) {// если есть идентификатор для списка
+                    list = [// список путей для проверки
+                        id
+                    ];
+                } else list = [];
                 value = "";// сбрасываем значение для запроса
                 for (var i = 0, iLen = list.length; i < iLen; i++) {
                     if (i) value += " OR ";// добавляем разделитель
                     value += "name = " + app.fun.repair(list[i] + key);
                 };
-                response = cim.execQuery(app.fun.debug(
-                    "SELECT name" +
-                    " FROM CIM_DataFile" +
-                    " WHERE " + value
-                ));
-                items = new Enumerator(response);
-                while (!items.atEnd()) {// пока не достигнут конец
-                    item = items.item();// получаем очередной элимент коллекции
-                    items.moveNext();// переходим к следующему элименту
-                    for (var i = 0, iLen = list.length; i < iLen; i++) {
-                        value = list[i] + key;// конечное значение
-                        if (item.name && item.name.toLowerCase() == value.toLowerCase()) {
-                            // характеристики
-                            data["APP-EFARMA-CASHER"] = value;
-                            // останавливаемся на первом элименте
-                            break;
+                if (value) {// если удалось сформировать значение
+                    response = cim.execQuery(app.fun.debug(
+                        "SELECT name" +
+                        " FROM CIM_DataFile" +
+                        " WHERE " + value
+                    ));
+                    items = new Enumerator(response);
+                    while (!items.atEnd()) {// пока не достигнут конец
+                        item = items.item();// получаем очередной элимент коллекции
+                        items.moveNext();// переходим к следующему элименту
+                        for (var i = 0, iLen = list.length; i < iLen; i++) {
+                            value = list[i] + key;// конечное значение
+                            if (item.name && item.name.toLowerCase() == value.toLowerCase()) {
+                                // характеристики
+                                data["APP-EFARMA-CASHER"] = value;
+                                // останавливаемся на первом элименте
+                                break;
+                            };
                         };
                     };
                 };
                 // ищем путь до сервера обновлений eFarma
                 key = "\\UpdateServer\\ePlus.UpdateServer.exe";
-                list = [// список путей для проверки
-                    id
-                ];
+                if (id) {// если есть идентификатор для списка
+                    list = [// список путей для проверки
+                        id
+                    ];
+                } else list = [];
                 value = "";// сбрасываем значение для запроса
                 for (var i = 0, iLen = list.length; i < iLen; i++) {
                     if (i) value += " OR ";// добавляем разделитель
                     value += "name = " + app.fun.repair(list[i] + key);
                 };
-                response = cim.execQuery(app.fun.debug(
-                    "SELECT name" +
-                    " FROM CIM_DataFile" +
-                    " WHERE " + value
-                ));
-                items = new Enumerator(response);
-                while (!items.atEnd()) {// пока не достигнут конец
-                    item = items.item();// получаем очередной элимент коллекции
-                    items.moveNext();// переходим к следующему элименту
-                    for (var i = 0, iLen = list.length; i < iLen; i++) {
-                        value = list[i] + key;// конечное значение
-                        if (item.name && item.name.toLowerCase() == value.toLowerCase()) {
-                            // характеристики
-                            data["APP-EFARMA-UPDATER"] = value;
-                            // останавливаемся на первом элименте
-                            break;
+                if (value) {// если удалось сформировать значение
+                    response = cim.execQuery(app.fun.debug(
+                        "SELECT name" +
+                        " FROM CIM_DataFile" +
+                        " WHERE " + value
+                    ));
+                    items = new Enumerator(response);
+                    while (!items.atEnd()) {// пока не достигнут конец
+                        item = items.item();// получаем очередной элимент коллекции
+                        items.moveNext();// переходим к следующему элименту
+                        for (var i = 0, iLen = list.length; i < iLen; i++) {
+                            value = list[i] + key;// конечное значение
+                            if (item.name && item.name.toLowerCase() == value.toLowerCase()) {
+                                // характеристики
+                                data["APP-EFARMA-UPDATER"] = value;
+                                // останавливаемся на первом элименте
+                                break;
+                            };
                         };
                     };
                 };
                 // ищем путь до файла лицензии eFarma
                 key = "lic";
-                list = [// список путей для проверки
-                    id + "\\UpdateServer\\",
-                    id + "\\Client\\",
-                    id + "\\ARM\\"
-                ];
+                if (id) {// если есть идентификатор для списка
+                    list = [// список путей для проверки
+                        id + "\\UpdateServer\\",
+                        id + "\\Client\\",
+                        id + "\\ARM\\"
+                    ];
+                } else list = [];
                 value = "";// сбрасываем значение для запроса
                 for (var i = 0, iLen = list.length; i < iLen; i++) {
                     if (i) value += " OR ";// добавляем разделитель
@@ -956,22 +1052,24 @@ var env = new App({
                     value += "AND path = " + app.fun.repair(app.lib.strim(list[i], ":", "", false, false)) + " ";
                     value += "AND extension = " + app.fun.repair(key);
                 };
-                response = cim.execQuery(app.fun.debug(
-                    "SELECT name, fileName" +
-                    " FROM CIM_DataFile" +
-                    " WHERE " + value
-                ));
-                items = new Enumerator(response);
-                while (!items.atEnd()) {// пока не достигнут конец
-                    item = items.item();// получаем очередной элимент коллекции
-                    items.moveNext();// переходим к следующему элименту
-                    for (var i = 0, iLen = list.length; i < iLen; i++) {
-                        value = list[i] + item.fileName + "." + key;// конечное значение
-                        if (item.name && item.name.toLowerCase() == value.toLowerCase()) {
-                            // характеристики
-                            data["APP-EFARMA-LICENSE"] = value;
-                            // останавливаемся на первом элименте
-                            break;
+                if (value) {// если удалось сформировать значение
+                    response = cim.execQuery(app.fun.debug(
+                        "SELECT name, fileName" +
+                        " FROM CIM_DataFile" +
+                        " WHERE " + value
+                    ));
+                    items = new Enumerator(response);
+                    while (!items.atEnd()) {// пока не достигнут конец
+                        item = items.item();// получаем очередной элимент коллекции
+                        items.moveNext();// переходим к следующему элименту
+                        for (var i = 0, iLen = list.length; i < iLen; i++) {
+                            value = list[i] + item.fileName + "." + key;// конечное значение
+                            if (item.name && item.name.toLowerCase() == value.toLowerCase()) {
+                                // характеристики
+                                data["APP-EFARMA-LICENSE"] = value;
+                                // останавливаемся на первом элименте
+                                break;
+                            };
                         };
                     };
                 };
@@ -990,23 +1088,25 @@ var env = new App({
                     if (i) value += " OR ";// добавляем разделитель
                     value += "name = " + app.fun.repair(list[i] + key);
                 };
-                response = cim.execQuery(app.fun.debug(
-                    "SELECT name" +
-                    " FROM CIM_DataFile" +
-                    " WHERE " + value
-                ));
-                items = new Enumerator(response);
-                while (!items.atEnd()) {// пока не достигнут конец
-                    item = items.item();// получаем очередной элимент коллекции
-                    items.moveNext();// переходим к следующему элименту
-                    for (var i = 0, iLen = list.length; i < iLen; i++) {
-                        value = list[i] + key;// конечное значение
-                        if (item.name && item.name.toLowerCase() == value.toLowerCase()) {
-                            // характеристики
-                            data["APP-ULUS"] = value;
-                            data["APP-ULUS-DIR"] = list[i];
-                            // останавливаемся на первом элименте
-                            break;
+                if (value) {// если удалось сформировать значение
+                    response = cim.execQuery(app.fun.debug(
+                        "SELECT name" +
+                        " FROM CIM_DataFile" +
+                        " WHERE " + value
+                    ));
+                    items = new Enumerator(response);
+                    while (!items.atEnd()) {// пока не достигнут конец
+                        item = items.item();// получаем очередной элимент коллекции
+                        items.moveNext();// переходим к следующему элименту
+                        for (var i = 0, iLen = list.length; i < iLen; i++) {
+                            value = list[i] + key;// конечное значение
+                            if (item.name && item.name.toLowerCase() == value.toLowerCase()) {
+                                // характеристики
+                                data["APP-ULUS"] = value;
+                                data["APP-ULUS-DIR"] = list[i];
+                                // останавливаемся на первом элименте
+                                break;
+                            };
                         };
                     };
                 };
