@@ -1,4 +1,4 @@
-/* 1.2.1 определяет дополнительные переменные среды
+/* 1.2.2 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -243,9 +243,9 @@ var env = new App({
             })()
         },
         init: function () {// функция инициализации приложения
-            var shell, key, value, list, locator, cim, ldap, storage, registry, mode,
-                method, param, unit, item, items, command, id, time, drive, score, total,
-                offset, index, columns, line, lines, delim, isEmpty, hosts,
+            var shell, key, value, list, locator, cim, ldap, storage, registry,
+                mode, method, param, unit, item, items, command, id, time, drive,
+                score, total, offset, index, columns, delim, isEmpty, isAddType,
                 host = "", domain = "", user = {}, data = {}, config = {},
                 benchmark = 0;
 
@@ -356,7 +356,7 @@ var env = new App({
                     item = registry.execMethod_(method.name, param);
                     if (!item.returnValue) {// если удалось прочитать значение
                         value = app.fun.bin2key(item.uValue);// преобразовываем значение ключа
-                        if(value = app.fun.clear(value, "BBBBB-BBBBB-BBBBB-BBBBB-BBBBB")) data["SYS-KEY"] = value;
+                        if (value = app.fun.clear(value, "BBBBB-BBBBB-BBBBB-BBBBB-BBBBB")) data["SYS-KEY"] = value;
                     };
                 };
                 // вычисляем характеристики операционной системы
@@ -1227,36 +1227,36 @@ var env = new App({
             };
             // обрабатываем данные с потока ввода
             if (config.input && value) {// если нужно выполнить
-                index = 0;// сбрасываем указатель на первую строку
                 delim = "";// сбрасываем разделитель значений
-                lines = value.split(app.val.linDelim);
+                items = null;// сбрасываем список элиментов
+                app.fun.debug("Convert input data");
                 switch (config.input) {// поддерживаемые служебные параметры
-                    case "ini":// значения для формата ini
-                        item = app.lib.ini2obj(value, false);
-                        for (var key in item) {// пробигаемся по свойствам
-                            if (key && item[key] && !(key in data)) {// если нужно добавить
-                                data[key] = item[key];
-                            };
-                        };
-                        break;
                     case "TSV":// заголовки для формата tsv
                         if (!delim) delim = app.val.tsvDelim;
                     case "CSV":// заголовки для формата csv
                         if (!delim) delim = app.val.csvDelim;
-                        if (index < lines.length) {// если есть строки
-                            columns = lines[index++].split(delim);
-                        };
+                        if (!items) items = app.lib.tsv2arr(value, false, delim);
+                        if (items.length) columns = items.shift();
                     case "tsv":// значения для формата tsv
                         if (!delim) delim = app.val.tsvDelim;
                     case "csv":// значения для формата csv
                         if (!delim) delim = app.val.csvDelim;
-                        while (index < lines.length) {// пока есть строки
-                            list = lines[index++].split(delim);
-                            for (var i = 0, iLen = columns.length; i < iLen; i++) {
-                                key = columns[i];// получаем очередной ключ
-                                if (key && list[i] && !(key in data)) {// если нужно добавить
-                                    data[key] = list[i];
-                                };
+                        if (!items) items = app.lib.tsv2arr(value, false, delim);
+                    case "ini":// значения для формата ini
+                        if (items) {// если получен список для преобразования
+                            unit = {};// начальное значение элимента
+                            app.lib.arr2obj(items, function (item) {
+                                app.lib.extend(unit,// объединяем с преобразованным элиментом
+                                    app.lib.arr2obj(item, null, function (value, index) {
+                                        if (value) return columns[index];
+                                    })
+                                );
+                            });
+                        } else unit = app.lib.ini2obj(value, false);
+                        for (var key in unit) {// пробигаемся по свойствам
+                            value = unit[key];// получаем очередное значение
+                            if (key && value && !(key in data)) {// если нужно добавить
+                                data[key] = value;
                             };
                         };
                         break;
@@ -1264,51 +1264,26 @@ var env = new App({
             };
             // готовим данные в поток вывода
             if (config.output) {// если нужно вывести данные
-                lines = [];// сбрасываем массив строк
                 delim = "";// сбрасываем разделитель значений
-                app.fun.debug("Write output data");
+                isAddType = null;// сбрасываем значение
+                app.fun.debug("Convert output data");
                 switch (config.output) {// поддерживаемые служебные параметры
                     case "ini":// значения для формата ini
                         delim = app.val.argDelim + app.val.iniDelim + app.val.argDelim;
-                        list = [];// сбрасываем список ключей
-                        for (var key in data) list.push(key);
-                        list.sort();// сортируем список
-                        for (var i = 0, iLen = list.length; i < iLen; i++) {
-                            key = list[i];// получаем очередной ключ
-                            value = data[key] ? data[key] : "";
-                            line = key + delim + value;
-                            lines.push(line);
-                        };
-                        value = lines.join(app.val.linDelim);
+                        item = app.lib.sort(data, "asc");// сортируем ключи в объекте
+                        value = app.lib.obj2str(item, false, app.val.linDelim, delim);
                         break;
                     case "TSV":// заголовки для формата tsv
                         if (!delim) delim = app.val.tsvDelim;
                     case "CSV":// заголовки для формата csv
                         if (!delim) delim = app.val.csvDelim;
-                        isEmpty = true;// пустая ли строка
-                        list = [];// сбрасываем список значений
-                        for (var i = 0, iLen = columns.length; i < iLen; i++) {
-                            key = columns[i];// получаем очередной ключ
-                            if (key) isEmpty = false;
-                            list.push(key);
-                        };
-                        line = columns.join(delim);
-                        if (!isEmpty) lines.push(line);
+                        isAddType = false;// добавляем заголовок
                     case "tsv":// значения для формата tsv
                         if (!delim) delim = app.val.tsvDelim;
                     case "csv":// значения для формата csv
                         if (!delim) delim = app.val.csvDelim;
-                        isEmpty = true;// пустая ли строка
-                        list = [];// сбрасываем список значений
-                        for (var i = 0, iLen = columns.length; i < iLen; i++) {
-                            key = columns[i];// получаем очередной ключ
-                            value = data[key] ? data[key] : "";
-                            if (value) isEmpty = false;
-                            list.push(value);
-                        };
-                        line = list.join(delim);
-                        if (!isEmpty) lines.push(line);
-                        value = lines.join(app.val.linDelim);
+                        items = [data];// список значений для вывода
+                        value = app.lib.arr2tsv(items, columns, delim, isAddType);
                         break;
                 };
             };
@@ -1316,6 +1291,7 @@ var env = new App({
             if (config.output && value) {// если нужно выполнить
                 value += app.val.linDelim;
                 // отправляем текстовые данные в поток
+                app.fun.debug("Write output data");
                 try {// пробуем отправить данные
                     wsh.stdOut.write(value);
                 } catch (e) { };// игнорируем исключения
