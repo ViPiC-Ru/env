@@ -1,4 +1,4 @@
-/* 1.2.2 определяет дополнительные переменные среды
+/* 1.2.3 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -431,12 +431,14 @@ var env = new App({
                 response = cim.execQuery(app.fun.debug(
                     "SELECT *" +
                     " FROM Win32_NetworkAdapterConfiguration" +
-                    " WHERE ipEnabled = TRUE"
+                    " WHERE ipEnabled = TRUE" +
+                    " AND fullDNSRegistrationEnabled = TRUE"
                 ));
                 items = new Enumerator(response);
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
                     items.moveNext();// переходим к следующему элименту
+                    if (item.serviceName && -1 != item.serviceName.indexOf("vpn")) continue;
                     if (value = item.index) id = value;
                     // основной адрес 
                     if (null != item.ipAddress) {// если есть список ip адресов
@@ -476,7 +478,7 @@ var env = new App({
                     };
                     // характеристики
                     if (value = app.fun.clear(item.dhcpServer)) data["NET-DHCP-V4"] = value;
-                    if (value = app.fun.clear(item.description, "Сетевой адаптер", "Адаптер", "для виртуальной сети", "Сетевая карта", "Контроллер", "NIC (NDIS 6.20)", "- Минипорт планировщика пакетов", "Family Controller", "Adapter")) data["NET-NAME"] = value;
+                    if (value = app.fun.clear(item.description, "Сетевой адаптер", "Адаптер", "для виртуальной сети", "Сетевая карта", "Контроллер", "NIC (NDIS 6.20)", "- Минипорт планировщика пакетов", "Family Controller", "Adapter", "Virtual Miniport", "for Windows", "x64").replace(/#\d+$/g, "")) data["NET-NAME"] = value;
                     if (value = app.fun.clear(item.macAddress)) data["NET-MAC"] = value;
                     // останавливаемся на первом элименте
                     break;
