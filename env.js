@@ -1,4 +1,4 @@
-/* 1.3.1 определяет дополнительные переменные среды
+/* 1.3.2 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -957,7 +957,7 @@ var env = new App({
                     if (key) score = Math.max(score, "SDD" == key ? 15.51143 : 7.14577);
                 };
                 if (score) benchmark = benchmark ? Math.min(benchmark, score) : score;
-                // вычисляем оптический накопитель
+                // вычисляем оптический привод
                 id = "";// сбрасываем идентификатор элимента
                 response = cim.execQuery(app.fun.debug(
                     "SELECT mediaType, caption, drive" +
@@ -969,6 +969,8 @@ var env = new App({
                     items.moveNext();// переходим к следующему элименту
                     if (item.caption && -1 != item.caption.indexOf("Alcohol")) continue;
                     if (item.caption && -1 != item.caption.indexOf("Virtual")) continue;
+                    if (item.caption && -1 != item.caption.indexOf("Виртуальный")) continue;
+                    if (item.mediaType && "UNKNOWN" == item.mediaType) continue;
                     // определяем тип насителя
                     switch (item.mediaType) {// поддерживаемые типы
                         case "CD-ROM": data["ROM-TYPE"] = "CD"; break;
