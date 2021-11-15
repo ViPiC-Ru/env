@@ -1,4 +1,4 @@
-/* 1.3.0 определяет дополнительные переменные среды
+/* 1.3.1 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -479,7 +479,8 @@ var env = new App({
                     item = items.item();// получаем очередной элимент коллекции
                     items.moveNext();// переходим к следующему элименту
                     if (item.serviceName && -1 != item.serviceName.indexOf("vpn")) continue;
-                    if (value = item.index) id = value;
+                    if (item.serviceName && -1 != item.serviceName.indexOf("VBox")) continue;
+                    if (value = item.interfaceIndex) id = value;
                     // основной адрес 
                     if (null != item.ipAddress) {// если есть список ip адресов
                         list = item.ipAddress.toArray();// получаем очередной список
@@ -524,26 +525,26 @@ var env = new App({
                     break;
                 };
                 // вычисляем характеристики сетевого адаптера
-                score = 0;// обнуляем текущую оценку
-                response = cim.execQuery(app.fun.debug(
-                    "SELECT speed, timeOfLastReset" +
-                    " FROM Win32_NetworkAdapter" +
-                    " WHERE netEnabled = TRUE" +
-                    " AND deviceID = " + app.fun.repair(id)
-                ));
-                items = new Enumerator(response);
-                while (!items.atEnd()) {// пока не достигнут конец
-                    item = items.item();// получаем очередной элимент коллекции
-                    items.moveNext();// переходим к следующему элименту
-                    // характеристики
-                    if (value = item.speed) data["NET-SPEED"] = app.fun.info2str(value, 0, 1000) + "бит/с";
-                    if (value = item.speed) data["NET-SPEED-VAL"] = value;
-                    if (value = item.timeOfLastReset) data["NET-RESET"] = app.lib.date2str(app.fun.wql2date(value), "d.m.Y H:i:s");
-                    if (value = item.timeOfLastReset) data["NET-RESET-DATE"] = app.lib.date2str(app.fun.wql2date(value), "d.m.Y");
-                    // останавливаемся на первом элименте
-                    break;
+                if (id) {// если есть идентификатор для запроса
+                    response = cim.execQuery(app.fun.debug(
+                        "SELECT speed, timeOfLastReset" +
+                        " FROM Win32_NetworkAdapter" +
+                        " WHERE netEnabled = TRUE" +
+                        " AND interfaceIndex = " + app.fun.repair(id)
+                    ));
+                    items = new Enumerator(response);
+                    while (!items.atEnd()) {// пока не достигнут конец
+                        item = items.item();// получаем очередной элимент коллекции
+                        items.moveNext();// переходим к следующему элименту
+                        // характеристики
+                        if (value = item.speed) data["NET-SPEED"] = app.fun.info2str(value, 0, 1000) + "бит/с";
+                        if (value = item.speed) data["NET-SPEED-VAL"] = value;
+                        if (value = item.timeOfLastReset) data["NET-RESET"] = app.lib.date2str(app.fun.wql2date(value), "d.m.Y H:i:s");
+                        if (value = item.timeOfLastReset) data["NET-RESET-DATE"] = app.lib.date2str(app.fun.wql2date(value), "d.m.Y");
+                        // останавливаемся на первом элименте
+                        break;
+                    };
                 };
-                if (score) benchmark = benchmark ? Math.min(benchmark, score) : score;
                 // вычисляем дополнительные характеристики
                 response = cim.execQuery(app.fun.debug(
                     "SELECT *" +
