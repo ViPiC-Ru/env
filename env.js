@@ -1,4 +1,4 @@
-/* 1.2.3 определяет дополнительные переменные среды
+/* 1.3.0 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -58,6 +58,26 @@ var env = new App({
                     1 * wql.substr(12, 2),
                     1 * wql.substr(14, 3)
                 ) : 0);
+            },
+
+            /**
+             * Преобразовывает номер недели в году в объект даты по стандарту ISO-8601.
+             * @param {number} week - Номер недели в году.
+             * @param {number} [year] - Расчётный год.
+             * @returns {date} Дата четверга заданной недели.
+             */
+
+            getDateOfWeek: function getDateOfWeek(week, year) {
+                var day, now, date;
+
+                now = new Date();// текущее время
+                week = 1 * week || 1;// по умолчанию первая неделя
+                year = 1 * year || now.getFullYear();// текущий год
+                day = new Date(year, 0, 4).getDay();// день для 4 января
+                day = (6 + day) % 7;// начало недели с понедельника
+                date = new Date(year, 0, 0 - day + 7 * week);
+                // возвращаем результат
+                return date;
             },
 
             /**
@@ -134,6 +154,24 @@ var env = new App({
                 };
                 // возвращаем результат
                 return sid;
+            },
+
+            /**
+             * Преобразовывает бинарные данные в строку текста.
+             * @param {binary} bin - Бинарные данные для преобразования.
+             * @returns {string} Строковое значение после преобразования.
+             */
+
+            bin2str: function (bin) {
+                var list, index, value = "";
+
+                list = bin.toArray();
+                for (var i = 0, iLen = list.length; i < iLen; i++) {
+                    index = list[i];// получаем очередное значение
+                    if (index) value += String.fromCharCode(index);
+                };
+                // возвращаем результат
+                return value;
             },
 
             /**
@@ -243,7 +281,7 @@ var env = new App({
             })()
         },
         init: function () {// функция инициализации приложения
-            var shell, key, value, list, locator, cim, ldap, storage, registry,
+            var shell, key, value, list, locator, cim, wmi, ldap, storage, registry,
                 mode, method, param, unit, item, items, command, id, time, drive,
                 score, total, offset, index, columns, delim, isEmpty, isAddType,
                 host = "", domain = "", user = {}, data = {}, config = {},
@@ -329,17 +367,19 @@ var env = new App({
                     try {// пробуем подключиться к компьютеру
                         switch (index) {// последовательно создаём объекты
                             case 1: cim = locator.connectServer(config.context, "root\\CIMV2"); break;
-                            case 2: ldap = locator.connectServer(".", "root\\directory\\LDAP"); break;
-                            case 3: storage = locator.connectServer(config.context, "root\\Microsoft\\Windows\\Storage"); break;
-                            case 4: registry = locator.connectServer(config.context, "root\\default").get("stdRegProv"); break;
+                            case 2: wmi = locator.connectServer(config.context, "root\\WMI"); break;
+                            case 3: ldap = locator.connectServer(".", "root\\directory\\LDAP"); break;
+                            case 4: storage = locator.connectServer(config.context, "root\\Microsoft\\Windows\\Storage"); break;
+                            case 5: registry = locator.connectServer(config.context, "root\\default").get("stdRegProv"); break;
                             default: index = -1;// завершаем создание
                         };
                     } catch (e) {// при возникновении ошибки
                         switch (index) {// последовательно сбрасываем объекты
                             case 1: cim = null; break;
-                            case 2: ldap = null; break;
-                            case 3: storage = null; break;
-                            case 4: registry = null; break;
+                            case 2: wmi = null; break;
+                            case 3: ldap = null; break;
+                            case 4: storage = null; break;
+                            case 5: registry = null; break;
                         };
                     };
                 };
@@ -640,7 +680,7 @@ var env = new App({
                         // характеристики
                         user.name = item.DS_displayName;
                         user.home = item.DS_homeDirectory;
-                        if (unit = item.DS_objectSid) user.sid = app.fun.bin2sid(unit.value);
+                        if (unit = item.DS_objectSid) if (value = app.fun.bin2sid(unit.value)) user.sid = value;
                         if (value = app.fun.clear(item.DS_co)) data["USR-COUNTRY"] = value;
                         if (value = app.fun.clear(item.DS_c)) data["USR-COUNTRY-ID"] = value;
                         if (value = app.fun.clear(item.DS_company)) data["USR-COMPANY"] = value;
@@ -816,6 +856,53 @@ var env = new App({
                     if (value = item.currentBitsPerPixel) data["GPU-COLOR-VAL"] = value;
                     // останавливаемся на первом элименте
                     break;
+                };
+                // вычисляем характеристики монитора
+                if (wmi) {// если удалось получить доступ к объекту                    
+                    // вычисляем общие характеристики монитора
+                    id = "";// сбрасываем идентификатор элимента
+                    response = wmi.execQuery(app.fun.debug(
+                        "SELECT instanceName, serialNumberId, userFriendlyName, weekOfManufacture, yearOfManufacture" +
+                        " FROM WmiMonitorID" +
+                        " WHERE active = TRUE"
+                    ));
+                    items = new Enumerator(response);
+                    while (!items.atEnd()) {// пока не достигнут конец
+                        item = items.item();// получаем очередной элимент коллекции
+                        items.moveNext();// переходим к следующему элименту
+                        if (value = item.instanceName) id = value;
+                        // характеристики
+                        if (value = app.fun.bin2str(item.userFriendlyName)) if (value = app.fun.clear(value, " 4K", " HDR")) data["MON-NAME"] = value;
+                        if (value = app.fun.bin2str(item.serialNumberId)) if (value = app.fun.clear(value)) data["MON-SERIAL"] = value;
+                        if (item.yearOfManufacture && item.weekOfManufacture) data["MON-RELEASE"] = app.lib.date2str(app.fun.getDateOfWeek(item.weekOfManufacture, item.yearOfManufacture), "d.m.Y H:i:s");
+                        if (item.yearOfManufacture && item.weekOfManufacture) data["MON-RELEASE-DATE"] = app.lib.date2str(app.fun.getDateOfWeek(item.weekOfManufacture, item.yearOfManufacture), "d.m.Y");
+                        // останавливаемся на первом элименте
+                        break;
+                    };
+                    // вычисляем дополнительные характеристики монитора
+                    if (id) {// если есть идентификатор для запроса
+                        response = wmi.execQuery(app.fun.debug(
+                            "SELECT maxHorizontalImageSize, maxVerticalImageSize" +
+                            " FROM WmiMonitorBasicDisplayParams" +
+                            " WHERE instanceName = " + app.fun.repair(id)
+                        ));
+                        items = new Enumerator(response);
+                        while (!items.atEnd()) {// пока не достигнут конец
+                            item = items.item();// получаем очередной элимент коллекции
+                            items.moveNext();// переходим к следующему элименту
+                            // характеристики
+                            if (value = item.maxHorizontalImageSize) data["MON-SIZE-X"] = value;
+                            if (value = item.maxVerticalImageSize) data["MON-SIZE-Y"] = value;
+                            if (item.maxHorizontalImageSize && item.maxVerticalImageSize) {// если заданы значения
+                                value = Math.sqrt(Math.pow(item.maxHorizontalImageSize, 2) + Math.pow(item.maxVerticalImageSize, 2));
+                                value = Math.round(value / 2.54);// переводим в дюймы и округляем
+                                data["MON-SIZE"] = item.maxHorizontalImageSize + " x " + item.maxVerticalImageSize + " см / " + value + '"';
+                                data["MON-SIZE-Z"] = value;
+                            };
+                            // останавливаемся на первом элименте
+                            break;
+                        };
+                    };
                 };
                 // вычисляем дисковую подсистему
                 score = 0;// обнуляем текущую оценку
