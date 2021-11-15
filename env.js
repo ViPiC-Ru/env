@@ -1,4 +1,4 @@
-/* 1.3.2 определяет дополнительные переменные среды
+/* 1.3.3 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -479,6 +479,7 @@ var env = new App({
                     item = items.item();// получаем очередной элимент коллекции
                     items.moveNext();// переходим к следующему элименту
                     if (item.serviceName && -1 != item.serviceName.indexOf("vpn")) continue;
+                    if (item.serviceName && -1 != item.serviceName.indexOf("loop")) continue;
                     if (item.serviceName && -1 != item.serviceName.indexOf("VBox")) continue;
                     if (value = item.interfaceIndex) id = value;
                     // основной адрес 
