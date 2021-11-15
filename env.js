@@ -1,4 +1,4 @@
-/* 1.3.3 определяет дополнительные переменные среды
+/* 1.3.4 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -685,15 +685,15 @@ var env = new App({
                         if (unit = item.DS_objectSid) if (value = app.fun.bin2sid(unit.value)) user.sid = value;
                         if (value = app.fun.clear(item.DS_co)) data["USR-COUNTRY"] = value;
                         if (value = app.fun.clear(item.DS_c)) data["USR-COUNTRY-ID"] = value;
-                        if (value = app.fun.clear(item.DS_company)) data["USR-COMPANY"] = value;
-                        if (value = app.fun.clear(item.DS_department)) data["USR-DEPARTMENT"] = value;
+                        if (value = app.fun.clear(item.DS_company, '"')) data["USR-COMPANY"] = value;
+                        if (value = app.fun.clear(item.DS_department, '"')) data["USR-DEPARTMENT"] = value;
                         if (value = app.fun.clear(item.DS_distinguishedName)) data["USR-ACCOUNT-DN"] = value;
                         if (value = app.fun.clear(item.DS_l)) data["USR-CITY"] = value;
                         if (value = app.fun.clear(item.DS_mail)) data["USR-EMAIL"] = value;
                         if (value = app.fun.clear(item.DS_mobile)) data["USR-MOBILE"] = value;
                         if (value = app.fun.clear(item.DS_telephoneNumber)) data["USR-PHONE"] = value;
-                        if (value = app.fun.clear(item.DS_title)) data["USR-POSITION"] = value;
-                        if (value = app.fun.clear(item.DS_info)) data["USR-INFO"] = value;
+                        if (value = app.fun.clear(item.DS_title, '"')) data["USR-POSITION"] = value;
+                        if (value = app.fun.clear(item.DS_info, '"')) data["USR-INFO"] = value;
                         // останавливаемся на первом элименте
                         break;
                     };
@@ -898,7 +898,7 @@ var env = new App({
                             if (item.maxHorizontalImageSize && item.maxVerticalImageSize) {// если заданы значения
                                 value = Math.sqrt(Math.pow(item.maxHorizontalImageSize, 2) + Math.pow(item.maxVerticalImageSize, 2));
                                 value = Math.round(value / 2.54);// переводим в дюймы и округляем
-                                data["MON-SIZE"] = item.maxHorizontalImageSize + " x " + item.maxVerticalImageSize + " см / " + value + '"';
+                                data["MON-SIZE"] = item.maxHorizontalImageSize + " x " + item.maxVerticalImageSize + " см / " + value + " дюйм" + app.lib.numDeclin(value, "ов", "", "а");
                                 data["MON-SIZE-Z"] = value;
                             };
                             // останавливаемся на первом элименте
@@ -1292,16 +1292,22 @@ var env = new App({
             };
             // формируем вспомогательные переменные
             columns = [// список выводимых данных для вывода в одну строку
-                "SYS-KEY", "SYS-NAME", "SYS-VERSION", "SYS-TIME", "SYS-ARCHITECTURE", "SYS-DRIVE", "SYS-INSTALL", "SYS-RESET", "SYS-SERIAL",
-                "PCB-NAME", "PCB-SERIAL", "PCB-BIOS-MANUFACTURE", "PCB-BIOS-RELEASE", "PCB-BIOS-VERSION", "PCB-BIOS-SERIAL",
-                "NET-IP-V4", "NET-GATEWAY-V4", "NET-DNS-V4", "NET-SUBNET-V4", "NET-DHCP-V4", "NET-NAME", "NET-MAC", "NET-SPEED", "NET-RESET", "NET-HOST", "NET-DOMAIN",
-                "USR-LOGIN", "USR-DOMAIN", "USR-ACCOUNT", "USR-NAME", "USR-SID", "USR-PROFILE",
-                "CPU-ARCHITECTURE", "CPU-SPEED", "CPU-NAME", "CPU-CORE", "CPU-SOCKET", "CPU-CACHE-L1", "CPU-CACHE-L2", "CPU-CACHE-L3",
-                "RAM-SIZE", "RAM-SPEED", "GPU-SIZE", "GPU-NAME", "GPU-VERSION", "GPU-RESOLUTION", "GPU-FREQUENCY", "GPU-COLOR",
-                "SSD-NAME", "SSD-VERSION", "SSD-SERIAL", "SSD-SIZE",
-                "HDD-NAME", "HDD-VERSION", "HDD-SERIAL", "HDD-SIZE",
-                "USB-NAME", "USB-VERSION", "USB-SERIAL", "USB-SIZE",
-                "ROM-TYPE", "ROM-NAME", "ROM-DRIVE", "ROM-VERSION",
+                "NET-HOST", "NET-DOMAIN",
+                "SYS-NAME", "SYS-VERSION", "SYS-ARCHITECTURE", "SYS-KEY", "SYS-TIME", "SYS-DRIVE", "SYS-INSTALL", "SYS-RESET",
+                "PCB-NAME", "PCB-SERIAL", "PCB-BIOS-SERIAL", "PCB-BIOS-RELEASE",
+                "CPU-NAME", "CPU-SOCKET", "CPU-CORE", "CPU-SPEED", "CPU-SPEED-VAL",
+                "RAM-SPEED", "RAM-SIZE", "RAM-SIZE-VAL",
+                "GPU-NAME", "GPU-RESOLUTION", "GPU-SIZE", "GPU-SIZE-VAL",
+                "MON-NAME", "MON-SERIAL", "MON-SIZE", "MON-SIZE-Z", "MON-RELEASE",
+                "NET-NAME", "NET-MAC", "NET-IP-V4", "NET-SUBNET-V4", "NET-GATEWAY-V4", "NET-DNS-V4", "NET-DHCP-V4",
+                "NET-IP-V6", "NET-SUBNET-V6", "NET-GATEWAY-V6", "NET-SPEED", "NET-SPEED-VAL", "NET-RESET",
+                "SSD-NAME", "SSD-SERIAL", "SSD-SIZE", "SSD-SIZE-VAL",
+                "HDD-NAME", "HDD-SERIAL", "HDD-SIZE", "HDD-SIZE-VAL",
+                "USB-NAME", "USB-SERIAL", "USB-SIZE", "USB-SIZE-VAL",
+                "ROM-NAME", "ROM-TYPE", "ROM-DRIVE",
+                "USR-ACCOUNT", "USR-DOMAIN", "USR-LOGIN", "USR-NAME", "USR-SID",
+                "USR-COUNTRY", "USR-CITY", "USR-COMPANY", "USR-DEPARTMENT", "USR-POSITION",
+                "USR-EMAIL", "USR-PHONE", "USR-MOBILE", "USR-PROFILE",
                 "DEV-NAME", "DEV-DESCRIPTION", "DEV-BENCHMARK"
             ];
             // получаем данные с потока ввода
