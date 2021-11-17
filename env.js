@@ -1,4 +1,4 @@
-/* 1.3.4 определяет дополнительные переменные среды
+/* 1.3.5 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -91,32 +91,37 @@ var env = new App({
                     chars = "BCDFGHJKMPQRTVWXY2346789",
                     key = "", offset = 52;
 
-                list = bin.toArray();
-                isWin8 = Math.floor(list[66] / 6) & 1;
-                list[66] = list[66] & 247 | (isWin8 & 2) * 4;
-                for (var i = 24; i > -1; i--) {// пробигаемся по индексу
-                    cur = 0;// сбрасываем значение курсора
-                    for (var j = 14; j > -1; j--) {// пробигаемся по индексу
-                        cur = cur * 256;
-                        cur = list[j + offset] + cur;
-                        list[j + offset] = Math.floor(cur / 24);
-                        cur = cur % 24;
+                try {// пробуем преобразовать в массив
+                    list = bin.toArray();
+                } catch (e) { list = []; };
+                if (list.length) {// если есть данные
+                    isWin8 = Math.floor(list[66] / 6) & 1;
+                    list[66] = list[66] & 247 | (isWin8 & 2) * 4;
+                    for (var i = 24; i > -1; i--) {// пробигаемся по индексу
+                        cur = 0;// сбрасываем значение курсора
+                        for (var j = 14; j > -1; j--) {// пробигаемся по индексу
+                            cur = cur * 256;
+                            cur = list[j + offset] + cur;
+                            list[j + offset] = Math.floor(cur / 24);
+                            cur = cur % 24;
+                        };
+                        key = chars.substr(cur, 1) + key;
+                        last = cur;
                     };
-                    key = chars.substr(cur, 1) + key;
-                    last = cur;
-                };
-                if (1 == isWin8) {// если это Windows 8
-                    part = key.substr(1, last);
-                    key = key.substr(1).replace(part, part + pref);
+                    if (1 == isWin8) {// если это Windows 8
+                        part = key.substr(1, last);
+                        key = key.substr(1).replace(part, part + pref);
+                    };
+                    key = [// форматируем ключ
+                        key.substr(0, 5),
+                        key.substr(5, 5),
+                        key.substr(10, 5),
+                        key.substr(15, 5),
+                        key.substr(20, 5)
+                    ].join("-");
                 };
                 // возвращаем результат
-                return [// форматируем ключ
-                    key.substr(0, 5),
-                    key.substr(5, 5),
-                    key.substr(10, 5),
-                    key.substr(15, 5),
-                    key.substr(20, 5)
-                ].join("-");
+                return key;
             },
 
             /**
@@ -129,28 +134,32 @@ var env = new App({
                 var list, revision, authority, subAuthority, count,
                     offset, size, id = "S", delim = "-", sid = "";
 
-                list = bin.toArray();
-                // 0 байт - номер редакции
-                revision = list[0] & 255;
-                sid += id + delim + revision;
-                // 1 байт - колличество дополнительных блоков
-                count = list[1] & 255;
-                // 2 - 7 байты - 48 битный основной блок [Big-Endian]
-                authority = 0;// сбрасываем значение
-                for (var i = 2; i <= 7; i++) {// пробигаемся по байтам
-                    authority += (list[i] & 255) * (1 << 8 * (5 - (i - 2)));
-                };
-                sid += delim + authority;
-                // 32 битные дополнительные блоки [Little-Endian]
-                size = 4; // 4 байта для каждого дополнительного блока
-                offset = 8;// задаём начальное смещение
-                for (var i = 0; i < count; i++) {// пробигаемся по блокам
-                    subAuthority = 0;// сбрасываем значение
-                    for (var j = 0; j < size; j++) {// пробигаемся по байтам
-                        subAuthority += (list[offset + j] & 255) * (1 << 8 * j);
+                try {// пробуем преобразовать в массив
+                    list = bin.toArray();
+                } catch (e) { list = []; };
+                if (list.length) {// если есть данные
+                    // 0 байт - номер редакции
+                    revision = list[0] & 255;
+                    sid += id + delim + revision;
+                    // 1 байт - колличество дополнительных блоков
+                    count = list[1] & 255;
+                    // 2 - 7 байты - 48 битный основной блок [Big-Endian]
+                    authority = 0;// сбрасываем значение
+                    for (var i = 2; i <= 7; i++) {// пробигаемся по байтам
+                        authority += (list[i] & 255) * (1 << 8 * (5 - (i - 2)));
                     };
-                    sid += delim + subAuthority;
-                    offset += size;
+                    sid += delim + authority;
+                    // 32 битные дополнительные блоки [Little-Endian]
+                    size = 4; // 4 байта для каждого дополнительного блока
+                    offset = 8;// задаём начальное смещение
+                    for (var i = 0; i < count; i++) {// пробигаемся по блокам
+                        subAuthority = 0;// сбрасываем значение
+                        for (var j = 0; j < size; j++) {// пробигаемся по байтам
+                            subAuthority += (list[offset + j] & 255) * (1 << 8 * j);
+                        };
+                        sid += delim + subAuthority;
+                        offset += size;
+                    };
                 };
                 // возвращаем результат
                 return sid;
@@ -165,7 +174,10 @@ var env = new App({
             bin2str: function (bin) {
                 var list, index, value = "";
 
-                list = bin.toArray();
+                try {// пробуем преобразовать в массив
+                    list = bin.toArray();
+                } catch (e) { list = []; };
+                // обрабатываем список значений
                 for (var i = 0, iLen = list.length; i < iLen; i++) {
                     index = list[i];// получаем очередное значение
                     if (index) value += String.fromCharCode(index);
@@ -396,7 +408,7 @@ var env = new App({
                     item = registry.execMethod_(method.name, param);
                     if (!item.returnValue) {// если удалось прочитать значение
                         value = app.fun.bin2key(item.uValue);// преобразовываем значение ключа
-                        if (value = app.fun.clear(value, "BBBBB-BBBBB-BBBBB-BBBBB-BBBBB")) data["SYS-KEY"] = value;
+                        if (value = app.fun.clear(value)) data["SYS-KEY"] = value;
                     };
                 };
                 // вычисляем характеристики операционной системы
@@ -864,7 +876,7 @@ var env = new App({
                     // вычисляем общие характеристики монитора
                     id = "";// сбрасываем идентификатор элимента
                     response = wmi.execQuery(app.fun.debug(
-                        "SELECT instanceName, serialNumberId, userFriendlyName, weekOfManufacture, yearOfManufacture" +
+                        "SELECT instanceName, serialNumberId, userFriendlyName, userFriendlyNameLength, weekOfManufacture, yearOfManufacture" +
                         " FROM WmiMonitorID" +
                         " WHERE active = TRUE"
                     ));
@@ -872,10 +884,11 @@ var env = new App({
                     while (!items.atEnd()) {// пока не достигнут конец
                         item = items.item();// получаем очередной элимент коллекции
                         items.moveNext();// переходим к следующему элименту
+                        if (!item.userFriendlyNameLength) continue;
                         if (value = item.instanceName) id = value;
                         // характеристики
                         if (value = app.fun.bin2str(item.userFriendlyName)) if (value = app.fun.clear(value, " 4K", " HDR")) data["MON-NAME"] = value;
-                        if (value = app.fun.bin2str(item.serialNumberId)) if (value = app.fun.clear(value)) data["MON-SERIAL"] = value;
+                        if (value = app.fun.bin2str(item.serialNumberId)) if (value = app.fun.clear(value)) if ("0" != value) data["MON-SERIAL"] = value;
                         if (item.yearOfManufacture && item.weekOfManufacture) data["MON-RELEASE"] = app.lib.date2str(app.fun.getDateOfWeek(item.weekOfManufacture, item.yearOfManufacture), "d.m.Y H:i:s");
                         if (item.yearOfManufacture && item.weekOfManufacture) data["MON-RELEASE-DATE"] = app.lib.date2str(app.fun.getDateOfWeek(item.weekOfManufacture, item.yearOfManufacture), "d.m.Y");
                         // останавливаемся на первом элименте
