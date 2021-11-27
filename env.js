@@ -1,4 +1,4 @@
-/* 1.3.5 определяет дополнительные переменные среды
+/* 1.3.6 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -293,71 +293,81 @@ var env = new App({
             })()
         },
         init: function () {// функция инициализации приложения
-            var shell, key, value, list, locator, cim, wmi, ldap, storage, registry,
-                mode, method, param, unit, item, items, command, id, time, drive,
+            var shell, time, key, value, list, locator, cim, wmi, ldap, storage, registry,
+                length, mode, method, param, unit, item, items, command, id, drive,
                 score, total, offset, index, columns, delim, isEmpty, isAddType,
                 host = "", domain = "", user = {}, data = {}, config = {},
                 benchmark = 0;
 
             time = new Date();
+            shell = new ActiveXObject("WScript.Shell");
+            locator = new ActiveXObject("wbemScripting.Swbemlocator");
+            locator.security_.impersonationLevel = 3;// Impersonate
             // получаем параметры конфигурации
-            for (var index = 0; index < wsh.arguments.length; index++) {
+            length = wsh.arguments.length;// получаем длину
+            for (index = 0; index < length; index++) {
                 value = wsh.arguments.item(index);// получаем очередное значение
                 // контекст выполнения
-                if (!("context" in config)) {// если нет в конфигурации
+                key = "context";// ключ проверяемого параметра
+                if (!(key in config)) {// если нет в конфигурации
                     list = value.split(app.val.keyDelim);// вспомогательный список
                     if (3 == list.length) {// если пройдена основная проверка
                         if (// множественное условие
                             !list[0] && !list[1]
                         ) {// если пройдена дополнительная проверка
-                            config.context = list[2];// задаём значение
+                            config[key] = list[2];// задаём значение
                             continue;// переходим к следующему параметру
                         };
                     };
                 };
-                // импорт данных
-                if (!("input" in config)) {// если нет в конфигурации
+                // импорт данных и кодировка
+                key = "input";// ключ проверяемого параметра
+                if (!(key in config)) {// если нет в конфигурации
                     list = value.split(app.val.chrDelim);// вспомогательный список
                     if (2 == list.length) {// если пройдена основная проверка
                         if (// множественное условие
                             app.lib.hasValue(["ini", "csv", "tsv", "CSV", "TSV"], list[0], true) && list[1]
                         ) {// если пройдена дополнительная проверка
-                            config.input = list[0];// задаём значение
+                            config[key] = list[0];// задаём значение
                             config.charset = list[1];// задаём значение
                             continue;// переходим к следующему параметру
                         };
                     };
                 };
                 // экспорт данных
-                if (!("output" in config)) {// если нет в конфигурации
+                key = "output";// ключ проверяемого параметра
+                if (!(key in config)) {// если нет в конфигурации
                     list = value.split(app.val.chrDelim);// вспомогательный список
                     if (1 == list.length) {// если пройдена основная проверка
                         if (// множественное условие
                             app.lib.hasValue(["ini", "csv", "tsv", "CSV", "TSV"], list[0], true)
                         ) {// если пройдена дополнительная проверка
-                            config.output = list[0];// задаём значение
+                            config[key] = list[0];// задаём значение
                             continue;// переходим к следующему параметру
                         };
                     };
                 };
                 // тихий режим
-                if (!("silent" in config)) {// если нет в конфигурации
-                    if ("silent" == value) {// если пройдена основная проверка
-                        config.silent = true;// задаём значение
+                key = "silent";// ключ проверяемого параметра
+                if (!(key in config)) {// если нет в конфигурации
+                    if (!app.lib.compare(key, value, true)) {// если пройдена основная проверка
+                        config[key] = true;// задаём значение
                         continue;// переходим к следующему параметру
                     };
                 };
                 // без ожидания
-                if (!("nowait" in config)) {// если нет в конфигурации
-                    if ("nowait" == value) {// если пройдена основная проверка
-                        config.nowait = true;// задаём значение
+                key = "nowait";// ключ проверяемого параметра
+                if (!(key in config)) {// если нет в конфигурации
+                    if (!app.lib.compare(key, value, true)) {// если пройдена основная проверка
+                        config[key] = true;// задаём значение
                         continue;// переходим к следующему параметру
                     };
                 };
                 // режим отладки
-                if (!("debug" in config)) {// если нет в конфигурации
-                    if ("debug" == value) {// если пройдена основная проверка
-                        config.debug = true;// задаём значение
+                key = "debug";// ключ проверяемого параметра
+                if (!(key in config)) {// если нет в конфигурации
+                    if (!app.lib.compare(key, value, true)) {// если пройдена основная проверка
+                        config[key] = true;// задаём значение
                         continue;// переходим к следующему параметру
                     };
                 };
@@ -369,13 +379,10 @@ var env = new App({
             if (!("context" in config)) config.context = ".";
             if ("auto" == config.charset) config.charset = "windows-1251";
             // создаём служебные объекты
-            shell = new ActiveXObject("WScript.Shell");
-            locator = new ActiveXObject("wbemScripting.Swbemlocator");
-            locator.security_.impersonationLevel = 3;// Impersonate
             app.fun.debug(config.debug);// если это необходимо включаем отладочный режим
             if (config.context) {// если есть контекст выполнения
                 app.fun.debug("Connect and create objects");
-                for (var index = 1; index; index++) {
+                for (index = 1; index; index++) {
                     try {// пробуем подключиться к компьютеру
                         switch (index) {// последовательно создаём объекты
                             case 1: cim = locator.connectServer(config.context, "root\\CIMV2"); break;
@@ -387,7 +394,7 @@ var env = new App({
                         };
                     } catch (e) {// при возникновении ошибки
                         switch (index) {// последовательно сбрасываем объекты
-                            case 1: cim = null; break;
+                            case 1: cim = null; index = -1; break;// завершаем создание
                             case 2: wmi = null; break;
                             case 3: ldap = null; break;
                             case 4: storage = null; break;
@@ -1417,7 +1424,8 @@ var env = new App({
             };
             // готовим командную строку для вызова
             items = [];// сбрасываем список аргументов
-            for (var index = offset; index < wsh.arguments.length; index++) {
+            length = wsh.arguments.length;// получаем длину
+            for (index = offset; index < length; index++) {
                 value = wsh.arguments.item(index);// получаем очередное значение
                 value = value.split(app.val.getDelim).join(app.val.setDelim);
                 value = shell.expandEnvironmentStrings(value);
