@@ -1,4 +1,4 @@
-/* 1.3.6 определяет дополнительные переменные среды
+/* 1.3.7 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -1345,9 +1345,9 @@ var env = new App({
                 };
             };
             // обрабатываем данные с потока ввода
+            items = null;// сбрасываем список элиментов
             if (config.input && value) {// если нужно выполнить
                 delim = "";// сбрасываем разделитель значений
-                items = null;// сбрасываем список элиментов
                 app.fun.debug("Convert input data");
                 switch (config.input) {// поддерживаемые служебные параметры
                     case "TSV":// заголовки для формата tsv
@@ -1361,17 +1361,33 @@ var env = new App({
                     case "csv":// значения для формата csv
                         if (!delim) delim = app.val.csvDelim;
                         if (!items) items = app.lib.tsv2arr(value, false, delim);
-                    case "ini":// значения для формата ini
-                        if (items) {// если получен список для преобразования
-                            unit = {};// начальное значение элимента
-                            app.lib.arr2obj(items, function (item) {
-                                app.lib.extend(unit,// объединяем с преобразованным элиментом
-                                    app.lib.arr2obj(item, null, function (value, index) {
-                                        if (value) return columns[index];
-                                    })
-                                );
+                        // преобразовываем список массивов в список объектов
+                        for (var i = 0, iLen = items.length; i < iLen; i++) {
+                            item = items[i];// получаем очередной элимент
+                            item = app.lib.arr2obj(item, null, function (value, index) {
+                                if (value) return columns[index];// возвращаем ключ
                             });
-                        } else unit = app.lib.ini2obj(value, false);
+                            items[i] = item;// сохраняем изменения
+                        };
+                    case "ini":// значения для формата ini
+                        if (!items) items = [app.lib.ini2obj(value, false)];
+                        // формируем сводный элимент и обновляем список объектов
+                        unit = {};// начальное значение сводного элимента
+                        for (var i = 0, iLen = items.length; i < iLen; i++) {
+                            item = items[i];// получаем очередной элимент
+                            // добавляем значения в сводный элимент
+                            for (var key in item) {// пробигаемся по свойствам
+                                value = item[key];// получаем очередное значение
+                                if (value) unit[key] = value;// в сводный элимент
+                            };
+                            // обновляем значения в текущем элименте
+                            for (var key in data) {// пробигаемся по свойствам
+                                value = data[key];// получаем очередное значение
+                                item[key] = value; // в текущий элимент
+                            };
+                            items[i] = item;// сохраняем изменения
+                        };
+                        // обновляем значения в данных для переменных среды
                         for (var key in unit) {// пробигаемся по свойствам
                             value = unit[key];// получаем очередное значение
                             if (key && value && !(key in data)) {// если нужно добавить
@@ -1384,6 +1400,7 @@ var env = new App({
             // готовим данные в поток вывода
             if (config.output) {// если нужно вывести данные
                 delim = "";// сбрасываем разделитель значений
+                items = items || [data];// список значений для вывода
                 isAddType = null;// сбрасываем значение
                 app.fun.debug("Convert output data");
                 switch (config.output) {// поддерживаемые служебные параметры
@@ -1401,7 +1418,6 @@ var env = new App({
                         if (!delim) delim = app.val.tsvDelim;
                     case "csv":// значения для формата csv
                         if (!delim) delim = app.val.csvDelim;
-                        items = [data];// список значений для вывода
                         value = app.lib.arr2tsv(items, columns, delim, isAddType);
                         break;
                 };
