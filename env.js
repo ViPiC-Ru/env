@@ -1,4 +1,4 @@
-/* 1.3.8 определяет дополнительные переменные среды
+/* 1.3.9 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -383,13 +383,13 @@ var env = new App({
             if (config.context) {// если есть контекст выполнения
                 app.fun.debug("Connect and create objects");
                 for (index = 1; index; index++) {
-                    try {// пробуем подключиться к компьютеру
+                    try {// пробуем подключиться к компьютеру используя флаг wbemConnectFlagUseMaxWait
                         switch (index) {// последовательно создаём объекты
-                            case 1: cim = locator.connectServer(config.context, "root\\CIMV2"); break;
-                            case 2: wmi = locator.connectServer(config.context, "root\\WMI"); break;
-                            case 3: ldap = locator.connectServer(".", "root\\directory\\LDAP"); break;
-                            case 4: storage = locator.connectServer(config.context, "root\\Microsoft\\Windows\\Storage"); break;
-                            case 5: registry = locator.connectServer(config.context, "root\\default").get("stdRegProv"); break;
+                            case 1: cim = locator.connectServer(config.context, "root\\CIMV2", null, null, null, null, 0x80); break;
+                            case 2: wmi = locator.connectServer(config.context, "root\\WMI", null, null, null, null, 0x80); break;
+                            case 3: ldap = locator.connectServer(".", "root\\directory\\LDAP", null, null, null, null, 0x80); break;
+                            case 4: storage = locator.connectServer(config.context, "root\\Microsoft\\Windows\\Storage", null, null, null, null, 0x80); break;
+                            case 5: registry = locator.connectServer(config.context, "root\\default", null, null, null, null, 0x80).get("stdRegProv"); break;
                             default: index = -1;// завершаем создание
                         };
                     } catch (e) {// при возникновении ошибки
