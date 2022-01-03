@@ -1,4 +1,4 @@
-/* 1.3.9 определяет дополнительные переменные среды
+/* 1.3.10 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -294,8 +294,8 @@ var env = new App({
         },
         init: function () {// функция инициализации приложения
             var shell, time, key, value, list, locator, cim, wmi, ldap, storage, registry,
-                length, mode, method, param, unit, item, items, command, id, drive,
-                score, total, offset, index, columns, delim, isEmpty, isAddType,
+                length, mode, method, param, unit, item, items, command, parent, score,
+                total, offset, index, columns, delim, isEmpty, isAddType,
                 host = "", domain = "", user = {}, data = {}, config = {},
                 benchmark = 0;
 
@@ -419,7 +419,7 @@ var env = new App({
                     };
                 };
                 // вычисляем характеристики операционной системы
-                id = "";// сбрасываем идентификатор элимента
+                parent = null;// сбрасываем значение
                 response = cim.execQuery(app.fun.debug(
                     "SELECT *" +
                     " FROM Win32_OperatingSystem" +
@@ -429,7 +429,7 @@ var env = new App({
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
                     items.moveNext();// переходим к следующему элименту
-                    if (value = item.systemDrive) drive = value;
+                    if (item.systemDrive) parent = item;
                     if (value = item.localDateTime) time = app.fun.wql2date(value);
                     // характеристики
                     if (value = app.fun.clear(item.caption, "Майкрософт", "Microsoft", "Edition", "x64", ",")) data["SYS-NAME"] = value;
@@ -447,8 +447,21 @@ var env = new App({
                     // останавливаемся на первом элименте
                     break;
                 };
+                // вычисляем букву диска для резервных копий
+                response = cim.execQuery(app.fun.debug(
+                    "SELECT caption, size" +
+                    " FROM Win32_LogicalDisk" +
+                    " WHERE driveType = 2 OR driveType = 3 OR driveType = 4"
+                ));
+                items = new Enumerator(response);
+                while (!items.atEnd()) {// пока не достигнут конец
+                    item = items.item();// получаем очередной элимент коллекции
+                    items.moveNext();// переходим к следующему элименту
+                    if (item.caption && parent && parent.systemDrive && -1 != item.caption.indexOf(parent.systemDrive) || data["BAK-DRIVE"]) continue;
+                    // характеристики
+                    if (value = app.fun.clear(item.caption)) if (item.size >= app.val.driveMinSize) data["BAK-DRIVE"] = value;
+                };
                 // вычисляем характеристики материнской платы
-                id = "";// сбрасываем идентификатор элимента
                 response = cim.execQuery(app.fun.debug(
                     "SELECT manufacturer, product, serialNumber" +
                     " FROM Win32_BaseBoard" +
@@ -466,7 +479,6 @@ var env = new App({
                     break;
                 };
                 // вычисляем характеристики basic input/output system
-                id = "";// сбрасываем идентификатор элимента
                 response = cim.execQuery(app.fun.debug(
                     "SELECT releaseDate, manufacturer, smBIOSBIOSVersion, serialNumber" +
                     " FROM Win32_BIOS" +
@@ -486,7 +498,7 @@ var env = new App({
                     break;
                 };
                 // вычисляем характеристики сетевого соединения
-                id = "";// сбрасываем идентификатор элимента
+                parent = null;// сбрасываем значение
                 response = cim.execQuery(app.fun.debug(
                     "SELECT *" +
                     " FROM Win32_NetworkAdapterConfiguration" +
@@ -500,7 +512,7 @@ var env = new App({
                     if (item.serviceName && -1 != item.serviceName.indexOf("vpn")) continue;
                     if (item.serviceName && -1 != item.serviceName.indexOf("loop")) continue;
                     if (item.serviceName && -1 != item.serviceName.indexOf("VBox")) continue;
-                    if (value = item.interfaceIndex) id = value;
+                    if (item.interfaceIndex) parent = item;
                     // основной адрес 
                     if (null != item.ipAddress) {// если есть список ip адресов
                         list = item.ipAddress.toArray();// получаем очередной список
@@ -545,12 +557,12 @@ var env = new App({
                     break;
                 };
                 // вычисляем характеристики сетевого адаптера
-                if (id) {// если есть идентификатор для запроса
+                if (parent && parent.interfaceIndex) {// если есть идентификатор для запроса
                     response = cim.execQuery(app.fun.debug(
                         "SELECT speed, timeOfLastReset" +
                         " FROM Win32_NetworkAdapter" +
                         " WHERE netEnabled = TRUE" +
-                        " AND interfaceIndex = " + app.fun.repair(id)
+                        " AND interfaceIndex = " + app.fun.repair(parent.interfaceIndex)
                     ));
                     items = new Enumerator(response);
                     while (!items.atEnd()) {// пока не достигнут конец
@@ -792,7 +804,6 @@ var env = new App({
                 };
                 // вычисляем характеристики центрального процессора
                 score = 0;// обнуляем текущую оценку
-                id = "";// сбрасываем идентификатор элимента
                 response = cim.execQuery(app.fun.debug(
                     "SELECT architecture, maxClockSpeed, name, revision, numberOfCores, socketDesignation" +
                     " FROM Win32_Processor" +
@@ -819,7 +830,6 @@ var env = new App({
                 };
                 if (score) benchmark = benchmark ? Math.min(benchmark, score) : score;
                 // вычисляем характеристики кеша процессора
-                id = "";// сбрасываем идентификатор элимента
                 response = cim.execQuery(app.fun.debug(
                     "SELECT level, maxCacheSize" +
                     " FROM Win32_CacheMemory"
@@ -834,7 +844,6 @@ var env = new App({
                 // вычисляем характеристики оперативной памяти
                 score = 0;// обнуляем текущую оценку
                 total = 0;// обнуляем значение для суммирования
-                id = "";// сбрасываем идентификатор элимента
                 response = cim.execQuery(app.fun.debug(
                     "SELECT capacity, speed" +
                     " FROM Win32_PhysicalMemory"
@@ -854,7 +863,8 @@ var env = new App({
                 };
                 if (score) benchmark = benchmark ? Math.min(benchmark, score) : score;
                 // вычисляем характеристики графического процессора
-                id = "";// сбрасываем идентификатор элимента
+                unit = null;// сбрасываем значение
+                parent = null;// сбрасываем значение
                 response = cim.execQuery(app.fun.debug(
                     "SELECT adapterRam, name, driverVersion, currentHorizontalResolution, currentRefreshRate, currentBitsPerPixel, currentVerticalResolution" +
                     " FROM Win32_VideoController"
@@ -863,25 +873,45 @@ var env = new App({
                 while (!items.atEnd()) {// пока не достигнут конец
                     item = items.item();// получаем очередной элимент коллекции
                     items.moveNext();// переходим к следующему элименту
+                    if (item.currentHorizontalResolution && item.currentVerticalResolution) {
+                        key = "Microsoft Remote Display";
+                        // производим сравнение элиментов
+                        value = parent ? 0 : 1;// сбрасваем значение для сравнения
+                        if (!value) value = item.name && -1 != item.name.indexOf(key) ? 1 : value;
+                        if (!value) value = parent.name && -1 != parent.name.indexOf(key) ? -1 : value;
+                        if (!value) value = app.lib.compare(item.currentHorizontalResolution, parent.currentHorizontalResolution);
+                        if (!value) value = app.lib.compare(item.currentVerticalResolution, parent.currentVerticalResolution);
+                        // запоминаем более подходящий элимент
+                        if (value > 0) parent = item;
+                    };
+                    // производим сравнение элиментов
+                    value = unit ? 0 : 1;// сбрасваем значение для сравнения
+                    if (!value) value = app.lib.compare(Math.abs(item.adapterRam), Math.abs(unit.adapterRam));
+                    if (!value) value = app.lib.compare(item.currentHorizontalResolution, unit.currentHorizontalResolution);
+                    if (!value) value = app.lib.compare(item.currentVerticalResolution, unit.currentVerticalResolution);
+                    // запоминаем более подходящий элимент
+                    if (value > 0) unit = item;
+                };
+                if (item = unit) {// если есть подходящий элимент
                     // характеристики
                     if (value = item.adapterRam) data["GPU-SIZE"] = app.fun.info2str(Math.abs(value), 0) + "Б";
                     if (value = item.adapterRam) data["GPU-SIZE-VAL"] = Math.abs(value);
                     if (value = app.fun.clear(item.name, "GPU", "Видеоустройство", "Family", "Chipset", "Series", "Graphics", "Adapter")) data["GPU-NAME"] = value;
                     if (value = app.fun.clear(item.driverVersion)) data["GPU-VERSION"] = value;
-                    if (item.currentHorizontalResolution && item.currentVerticalResolution) data["GPU-RESOLUTION"] = item.currentHorizontalResolution + " x " + item.currentVerticalResolution;
-                    if (value = item.currentHorizontalResolution) data["GPU-RESOLUTION-X"] = value;
-                    if (value = item.currentVerticalResolution) data["GPU-RESOLUTION-Y"] = value;
-                    if (value = item.currentRefreshRate) data["GPU-FREQUENCY"] = app.fun.info2str(value, 0, 1000) + "Гц";
-                    if (value = item.currentRefreshRate) data["GPU-FREQUENCY-VAL"] = value;
-                    if (value = item.currentBitsPerPixel) data["GPU-COLOR"] = app.fun.info2str(value, 0) + "бит" + app.lib.numDeclin(value, "", "", "а");
-                    if (value = item.currentBitsPerPixel) data["GPU-COLOR-VAL"] = value;
-                    // останавливаемся на первом элименте
-                    break;
+                    if (value = parent && parent.currentHorizontalResolution) data["GPU-RESOLUTION-X"] = value;
+                    if (value = parent && parent.currentVerticalResolution) data["GPU-RESOLUTION-Y"] = value;
+                    if (value = parent && parent.currentRefreshRate) data["GPU-FREQUENCY"] = app.fun.info2str(value, 0, 1000) + "Гц";
+                    if (value = parent && parent.currentRefreshRate) data["GPU-FREQUENCY-VAL"] = value;
+                    if (value = parent && parent.currentBitsPerPixel) data["GPU-COLOR"] = app.fun.info2str(value, 0) + "бит" + app.lib.numDeclin(value, "", "", "а");
+                    if (value = parent && parent.currentBitsPerPixel) data["GPU-COLOR-VAL"] = value;
+                    if (parent && parent.currentHorizontalResolution && parent.currentVerticalResolution) {
+                        data["GPU-RESOLUTION"] = parent.currentHorizontalResolution + " x " + parent.currentVerticalResolution;
+                    };
                 };
                 // вычисляем характеристики монитора
                 if (wmi) {// если удалось получить доступ к объекту                    
                     // вычисляем общие характеристики монитора
-                    id = "";// сбрасываем идентификатор элимента
+                    parent = null;// сбрасываем значение
                     response = wmi.execQuery(app.fun.debug(
                         "SELECT instanceName, serialNumberId, userFriendlyName, userFriendlyNameLength, weekOfManufacture, yearOfManufacture" +
                         " FROM WmiMonitorID" +
@@ -892,7 +922,7 @@ var env = new App({
                         item = items.item();// получаем очередной элимент коллекции
                         items.moveNext();// переходим к следующему элименту
                         if (!item.userFriendlyNameLength) continue;
-                        if (value = item.instanceName) id = value;
+                        if (item.instanceName) parent = item;
                         // характеристики
                         if (value = app.fun.bin2str(item.userFriendlyName)) if (value = app.fun.clear(value, " 4K", " HDR")) data["MON-NAME"] = value;
                         if (value = app.fun.bin2str(item.serialNumberId)) if (value = app.fun.clear(value)) if ("0" != value) data["MON-SERIAL"] = value;
@@ -902,11 +932,11 @@ var env = new App({
                         break;
                     };
                     // вычисляем дополнительные характеристики монитора
-                    if (id) {// если есть идентификатор для запроса
+                    if (parent && parent.instanceName) {// если есть идентификатор для запроса
                         response = wmi.execQuery(app.fun.debug(
                             "SELECT maxHorizontalImageSize, maxVerticalImageSize" +
                             " FROM WmiMonitorBasicDisplayParams" +
-                            " WHERE instanceName = " + app.fun.repair(id)
+                            " WHERE instanceName = " + app.fun.repair(parent.instanceName)
                         ));
                         items = new Enumerator(response);
                         while (!items.atEnd()) {// пока не достигнут конец
@@ -928,7 +958,6 @@ var env = new App({
                 };
                 // вычисляем дисковую подсистему
                 score = 0;// обнуляем текущую оценку
-                id = "";// сбрасываем идентификатор элимента
                 if (storage) {// если удалось получить доступ к объекту                    
                     response = storage.execQuery(app.fun.debug(
                         "SELECT model, firmwareVersion, mediaType, serialNumber, size" +
@@ -979,7 +1008,6 @@ var env = new App({
                 };
                 if (score) benchmark = benchmark ? Math.min(benchmark, score) : score;
                 // вычисляем оптический привод
-                id = "";// сбрасываем идентификатор элимента
                 response = cim.execQuery(app.fun.debug(
                     "SELECT mediaType, caption, drive" +
                     " FROM Win32_CDROMDrive"
@@ -1005,23 +1033,8 @@ var env = new App({
                     // останавливаемся на первом элименте
                     break;
                 };
-                // вычисляем букву диска для резервных копий
-                id = "";// сбрасываем идентификатор элимента
-                response = cim.execQuery(app.fun.debug(
-                    "SELECT caption, size" +
-                    " FROM Win32_LogicalDisk" +
-                    " WHERE driveType = 2 OR driveType = 3 OR driveType = 4"
-                ));
-                items = new Enumerator(response);
-                while (!items.atEnd()) {// пока не достигнут конец
-                    item = items.item();// получаем очередной элимент коллекции
-                    items.moveNext();// переходим к следующему элименту
-                    if (item.caption && -1 != item.caption.indexOf(drive) || data["BAK-DRIVE"]) continue;
-                    // характеристики
-                    if (value = app.fun.clear(item.caption)) if (item.size >= app.val.driveMinSize) data["BAK-DRIVE"] = value;
-                };
                 // ищем корневую папку программы eFarma
-                id = "";// сбрасываем идентификатор элимента
+                parent = null;// сбрасываем значение
                 key = "DisplayIcon";// ключ для проверки
                 list = [// список путей для проверки
                     "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\F3 TAIL",
@@ -1046,14 +1059,14 @@ var env = new App({
                     list.pop();// удаляем последнай элимент
                     list.pop();// удаляем последнай элимент
                     // характеристики
-                    id = list.join(app.val.keyDelim);
-                    data["APP-EFARMA-DIR"] = id;
+                    parent = list.join(app.val.keyDelim);
+                    data["APP-EFARMA-DIR"] = parent;
                 };
                 // ищем путь до клиента eFarma
                 key = "\\Client\\ePlus.Client.exe";
-                if (id) {// если есть идентификатор для списка
+                if (parent) {// если есть идентификатор для списка
                     list = [// список путей для проверки
-                        id
+                        parent
                     ];
                 } else list = [];
                 value = "";// сбрасываем значение для запроса
@@ -1084,9 +1097,9 @@ var env = new App({
                 };
                 // ищем путь до кассы eFarma
                 key = "\\ARM\\ePlus.ARMCasherNew.exe";
-                if (id) {// если есть идентификатор для списка
+                if (parent) {// если есть идентификатор для списка
                     list = [// список путей для проверки
-                        id
+                        parent
                     ];
                 } else list = [];
                 value = "";// сбрасываем значение для запроса
@@ -1117,9 +1130,9 @@ var env = new App({
                 };
                 // ищем путь до сервера обновлений eFarma
                 key = "\\UpdateServer\\ePlus.UpdateServer.exe";
-                if (id) {// если есть идентификатор для списка
+                if (parent) {// если есть идентификатор для списка
                     list = [// список путей для проверки
-                        id
+                        parent
                     ];
                 } else list = [];
                 value = "";// сбрасываем значение для запроса
@@ -1150,11 +1163,11 @@ var env = new App({
                 };
                 // ищем путь до файла лицензии eFarma
                 key = "lic";
-                if (id) {// если есть идентификатор для списка
+                if (parent) {// если есть идентификатор для списка
                     list = [// список путей для проверки
-                        id + "\\UpdateServer\\",
-                        id + "\\Client\\",
-                        id + "\\ARM\\"
+                        parent + "\\UpdateServer\\",
+                        parent + "\\Client\\",
+                        parent + "\\ARM\\"
                     ];
                 } else list = [];
                 value = "";// сбрасываем значение для запроса
@@ -1186,7 +1199,6 @@ var env = new App({
                     };
                 };
                 // ищем корневую папку программы УЛУС
-                id = "";// сбрасываем идентификатор элимента
                 value = app.lib.date2str(time, "Y");
                 key = "\\ULUS.exe";
                 list = [// список путей для проверки
@@ -1223,7 +1235,6 @@ var env = new App({
                     };
                 };
                 // ищем корневую папку программы Chrome
-                id = "";// сбрасываем идентификатор элимента
                 key = "";// ключ для проверки
                 list = [// список путей для проверки
                     "SOFTWARE\\Clients\\StartMenuInternet\\Google Chrome\\shell\\open\\command",
@@ -1249,7 +1260,6 @@ var env = new App({
                     data["APP-CHROME-DIR"] = list.join(app.val.keyDelim);
                 };
                 // ищем корневую папку программы VLC
-                id = "";// сбрасываем идентификатор элимента
                 key = "";// ключ для проверки
                 list = [// список путей для проверки
                     "SOFTWARE\\VideoLAN\\VLC",
@@ -1275,7 +1285,6 @@ var env = new App({
                     data["APP-VLC-DIR"] = list.join(app.val.keyDelim);
                 };
                 // вычисляем идентификатор TeamViewer
-                id = "";// сбрасываем идентификатор элимента
                 key = "ClientID";// ключ для проверки
                 list = [// список путей для проверки
                     "SOFTWARE\\TeamViewer",
