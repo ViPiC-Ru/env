@@ -1,4 +1,4 @@
-/* 1.3.10 определяет дополнительные переменные среды
+/* 1.3.11 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -295,7 +295,7 @@ var env = new App({
         init: function () {// функция инициализации приложения
             var shell, time, key, value, list, locator, cim, wmi, ldap, storage, registry,
                 length, mode, method, param, unit, item, items, command, parent, score,
-                total, offset, index, columns, delim, isEmpty, isAddType,
+                total, offset, index, columns, delim, isEmpty, isAddType, isLocalContext,
                 host = "", domain = "", user = {}, data = {}, config = {},
                 benchmark = 0;
 
@@ -376,7 +376,8 @@ var env = new App({
             };
             // вносим поправки для конфигурации
             offset = index;// запоминаем смещение по параметрам
-            if (!("context" in config)) config.context = ".";
+            isLocalContext = !("context" in config);
+            if (isLocalContext) config.context = ".";
             if ("auto" == config.charset) config.charset = "windows-1251";
             // создаём служебные объекты
             app.fun.debug(config.debug);// если это необходимо включаем отладочный режим
