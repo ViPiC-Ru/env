@@ -1,4 +1,4 @@
-/* 1.3.11 определяет дополнительные переменные среды
+/* 1.3.12 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -50,13 +50,13 @@ var env = new App({
 
             wql2date: function (wql, offset) {
                 return new Date(wql ? Date.UTC(
-                    1 * wql.substr(0, 4),
-                    1 * wql.substr(4, 2) - 1,
-                    1 * wql.substr(6, 2),
-                    1 * wql.substr(8, 2),
-                    1 * wql.substr(10, 2) - 1 * wql.substr(21, 4) + (offset || 0),
-                    1 * wql.substr(12, 2),
-                    1 * wql.substr(14, 3)
+                    1 * wql.substring(0, 4),
+                    1 * wql.substring(4, 6) - 1,
+                    1 * wql.substring(6, 8),
+                    1 * wql.substring(8, 10),
+                    1 * wql.substring(10, 12) - 1 * wql.substring(21, 25) + (offset || 0),
+                    1 * wql.substring(12, 14),
+                    1 * wql.substring(14, 17)
                 ) : 0);
             },
 
@@ -105,19 +105,19 @@ var env = new App({
                             list[j + offset] = Math.floor(cur / 24);
                             cur = cur % 24;
                         };
-                        key = chars.substr(cur, 1) + key;
+                        key = chars.substring(cur, cur + 1) + key;
                         last = cur;
                     };
                     if (1 == isWin8) {// если это Windows 8
-                        part = key.substr(1, last);
-                        key = key.substr(1).replace(part, part + pref);
+                        part = key.substring(1, last + 1);
+                        key = key.substring(1).replace(part, part + pref);
                     };
                     key = [// форматируем ключ
-                        key.substr(0, 5),
-                        key.substr(5, 5),
-                        key.substr(10, 5),
-                        key.substr(15, 5),
-                        key.substr(20, 5)
+                        key.substring(0, 5),
+                        key.substring(5, 10),
+                        key.substring(10, 15),
+                        key.substring(15, 20),
+                        key.substring(20, 25)
                     ].join("-");
                 };
                 // возвращаем результат
@@ -195,14 +195,14 @@ var env = new App({
              */
 
             info2str: function (info, decim, base) {
-                var factor, value, prefix = "КМГТПЭЗЙ";
+                var factor, value, prefix = "KMGTPEZYRQ";
 
                 if (!base || base < 2) base = 1024;
                 if (!decim || decim < 0) decim = 0;
                 factor = Math.pow(10, decim);
                 for (var i = -1; info >= base; i++) info = info / base;
                 value = Math.ceil(info * factor) / factor;
-                value = app.lib.num2str(value, i > -1 ? decim : 0, ",", "");
+                value = app.lib.num2str(value, i > -1 ? decim : 0, ".", "");
                 value += " " + prefix.charAt(i);
                 return value;
             },
@@ -416,7 +416,7 @@ var env = new App({
                     item = registry.execMethod_(method.name, param);
                     if (!item.returnValue) {// если удалось прочитать значение
                         value = app.fun.bin2key(item.uValue);// преобразовываем значение ключа
-                        if (value = app.fun.clear(value)) data["SYS-KEY"] = value;
+                        if (value = app.fun.clear(value, "BBBBB-BBBBB-BBBBB-BBBBB-BBBBB")) data["SYS-KEY"] = value;
                     };
                 };
                 // вычисляем характеристики операционной системы
@@ -570,7 +570,7 @@ var env = new App({
                         item = items.item();// получаем очередной элимент коллекции
                         items.moveNext();// переходим к следующему элименту
                         // характеристики
-                        if (value = item.speed) data["NET-SPEED"] = app.fun.info2str(value, 0, 1000) + "бит/с";
+                        if (value = item.speed) data["NET-SPEED"] = app.fun.info2str(value, 0, 1000) + "bps";
                         if (value = item.speed) data["NET-SPEED-VAL"] = value;
                         if (value = item.timeOfLastReset) data["NET-RESET"] = app.lib.date2str(app.fun.wql2date(value), "d.m.Y H:i:s");
                         if (value = item.timeOfLastReset) data["NET-RESET-DATE"] = app.lib.date2str(app.fun.wql2date(value), "d.m.Y");
@@ -817,7 +817,7 @@ var env = new App({
                     // характеристики
                     if (0 == item.architecture) data["CPU-ARCHITECTURE"] = "x86";
                     else if (9 == item.architecture) data["CPU-ARCHITECTURE"] = "x64";
-                    if (value = item.maxClockSpeed) data["CPU-SPEED"] = app.fun.info2str(value * 1000 * 1000, 2, 1000) + "Гц";
+                    if (value = item.maxClockSpeed) data["CPU-SPEED"] = app.fun.info2str(value * 1000 * 1000, 2, 1000) + "Hz";
                     if (value = item.maxClockSpeed) data["CPU-SPEED-VAL"] = value * 1000 * 1000;
                     if (value = app.fun.clear(item.name, "CPU", "APU", "Процессор", "Processor", "with", "Radeon HD Graphics", "11th Gen")) data["CPU-NAME"] = value;
                     if (value = app.fun.clear(item.revision)) data["CPU-VERSION"] = value;
@@ -840,7 +840,7 @@ var env = new App({
                     item = items.item();// получаем очередной элимент коллекции
                     items.moveNext();// переходим к следующему элименту
                     // характеристики
-                    if (value = item.maxCacheSize) data["CPU-CACHE-L" + (item.level - 2)] = app.fun.info2str(value * 1024, 0) + "Б";
+                    if (value = item.maxCacheSize) data["CPU-CACHE-L" + (item.level - 2)] = app.fun.info2str(value * 1024, 0) + "B";
                 };
                 // вычисляем характеристики оперативной памяти
                 score = 0;// обнуляем текущую оценку
@@ -855,8 +855,8 @@ var env = new App({
                     items.moveNext();// переходим к следующему элименту
                     // характеристики
                     if (value = item.capacity) data["RAM-SIZE-VAL"] = total += 1 * value;
-                    if (value = item.capacity) data["RAM-SIZE"] = app.fun.info2str(total, 0) + "Б";
-                    if (value = item.speed) data["RAM-SPEED"] = value + " МГц";
+                    if (value = item.capacity) data["RAM-SIZE"] = app.fun.info2str(total, 0) + "B";
+                    if (value = item.speed) data["RAM-SPEED"] = value + " MHz";
                     if (value = item.speed) data["RAM-SPEED-VAL"] = value * 1000 * 1000;
                     // косвенно считаем производительность
                     if (value = total) score = 2.51143 * Math.sqrt(value / 1024 / 1024 / 1024);
@@ -895,15 +895,15 @@ var env = new App({
                 };
                 if (item = unit) {// если есть подходящий элимент
                     // характеристики
-                    if (value = item.adapterRam) data["GPU-SIZE"] = app.fun.info2str(Math.abs(value), 0) + "Б";
+                    if (value = item.adapterRam) data["GPU-SIZE"] = app.fun.info2str(Math.abs(value), 0) + "B";
                     if (value = item.adapterRam) data["GPU-SIZE-VAL"] = Math.abs(value);
                     if (value = app.fun.clear(item.name, "GPU", "Видеоустройство", "Family", "Chipset", "Series", "Graphics", "Adapter")) data["GPU-NAME"] = value;
                     if (value = app.fun.clear(item.driverVersion)) data["GPU-VERSION"] = value;
                     if (value = parent && parent.currentHorizontalResolution) data["GPU-RESOLUTION-X"] = value;
                     if (value = parent && parent.currentVerticalResolution) data["GPU-RESOLUTION-Y"] = value;
-                    if (value = parent && parent.currentRefreshRate) data["GPU-FREQUENCY"] = app.fun.info2str(value, 0, 1000) + "Гц";
+                    if (value = parent && parent.currentRefreshRate) data["GPU-FREQUENCY"] = app.fun.info2str(value, 0, 1000) + "Hz";
                     if (value = parent && parent.currentRefreshRate) data["GPU-FREQUENCY-VAL"] = value;
-                    if (value = parent && parent.currentBitsPerPixel) data["GPU-COLOR"] = app.fun.info2str(value, 0) + "бит" + app.lib.numDeclin(value, "", "", "а");
+                    if (value = parent && parent.currentBitsPerPixel) data["GPU-COLOR"] = app.fun.info2str(value, 0) + "bit";
                     if (value = parent && parent.currentBitsPerPixel) data["GPU-COLOR-VAL"] = value;
                     if (parent && parent.currentHorizontalResolution && parent.currentVerticalResolution) {
                         data["GPU-RESOLUTION"] = parent.currentHorizontalResolution + " x " + parent.currentVerticalResolution;
@@ -949,7 +949,7 @@ var env = new App({
                             if (item.maxHorizontalImageSize && item.maxVerticalImageSize) {// если заданы значения
                                 value = Math.sqrt(Math.pow(item.maxHorizontalImageSize, 2) + Math.pow(item.maxVerticalImageSize, 2));
                                 value = Math.round(value / 2.54);// переводим в дюймы и округляем
-                                data["MON-SIZE"] = item.maxHorizontalImageSize + " x " + item.maxVerticalImageSize + " см / " + value + " дюйм" + app.lib.numDeclin(value, "ов", "", "а");
+                                data["MON-SIZE"] = item.maxHorizontalImageSize + " x " + item.maxVerticalImageSize + " cm / " + value + " in";
                                 data["MON-SIZE-Z"] = value;
                             };
                             // останавливаемся на первом элименте
@@ -1002,7 +1002,7 @@ var env = new App({
                     if (value = app.fun.clear(item.model, "ATA Device", "SCSI Disk Device", "USB Device", "SSD", "SATA")) data[key + "-NAME"] = value;
                     if (value = app.fun.clear(item.firmwareVersion || item.firmwareRevision)) data[key + "-VERSION"] = value;
                     if (value = app.fun.clear(item.serialNumber)) data[key + "-SERIAL"] = value;
-                    if (value = item.size) data[key + "-SIZE"] = app.fun.info2str(value, 0) + "Б";
+                    if (value = item.size) data[key + "-SIZE"] = app.fun.info2str(value, 0) + "B";
                     if (value = item.size) data[key + "-SIZE-VAL"] = value;
                     // косвенно считаем производительность
                     if (key) score = Math.max(score, "SDD" == key ? 15.51143 : 7.14577);
@@ -1309,16 +1309,16 @@ var env = new App({
                 };
                 // вычисляем сумарное название компьютера
                 list = [];// очищаем значение переменной
-                if (data["CPU-NAME"] && data["CPU-CORE"] && data["CPU-SPEED"]) list.push(app.fun.clear(data["CPU-NAME"].replace("Dual-Core", "Intel"), "Dual Core", "Xeon", "Pentium", "Celeron", "Core2 Duo", "Core", "Processor", "Athlon 64", "Athlon", /,.+/, /@.+/, /\d\.d+GHz/) + " " + data["CPU-CORE"] + "x" + data["CPU-SPEED"].replace(",", ".").replace(" МГц", "M").replace(" ГГц", "G") + "Hz");
-                if (data["RAM-SIZE"] && data["RAM-SPEED"]) list.push(data["RAM-SIZE"].replace(" МБ", "MB").replace(" ГБ", "GB") + " " + data["RAM-SPEED"].replace(" МГц", "M").replace(" ГГц", "G") + "Hz");
-                if (data["GPU-SIZE"] && data["GPU-NAME"] && (-1 != data["GPU-NAME"].indexOf("GeForce") || -1 != data["GPU-NAME"].indexOf("Radeon"))) list.push(data["GPU-SIZE"].replace(" МБ", "MB").replace(" ГБ", "GB") + " " + app.fun.clear(data["GPU-NAME"], "AMD", "NVIDIA", "GeForce", "Radeon", /\(.+/));
-                if (data["HDD-SIZE"]) list.push(data["HDD-SIZE"].replace(" МБ", "MB").replace(" ГБ", "GB").replace(" ТБ", "TB") + " HDD");
-                if (data["SSD-SIZE"]) list.push(data["SSD-SIZE"].replace(" МБ", "MB").replace(" ГБ", "GB").replace(" ТБ", "TB") + " SSD");
-                if (data["USB-SIZE"]) list.push(data["USB-SIZE"].replace(" МБ", "MB").replace(" ГБ", "GB").replace(" ТБ", "TB") + " USB");
+                if (data["CPU-NAME"] && data["CPU-CORE"] && data["CPU-SPEED"]) list.push(app.fun.clear(data["CPU-NAME"].replace("Dual-Core", "Intel"), "Dual Core", "Xeon", "Pentium", "Celeron", "Core2 Duo", "Core", "Processor", "Athlon 64", "Athlon", /,.+/, /@.+/, /\d\.d+GHz/) + " " + data["CPU-CORE"] + "x" + data["CPU-SPEED"].replace(" ", ""));
+                if (data["RAM-SIZE"] && data["RAM-SPEED"]) list.push(data["RAM-SIZE"].replace(" ", "") + " " + data["RAM-SPEED"].replace(" ", ""));
+                if (data["GPU-SIZE"] && data["GPU-NAME"] && (-1 != data["GPU-NAME"].indexOf("GeForce") || -1 != data["GPU-NAME"].indexOf("Radeon"))) list.push(data["GPU-SIZE"].replace(" ", "") + " " + app.fun.clear(data["GPU-NAME"], "AMD", "NVIDIA", "GeForce", "Radeon", /\(.+/));
+                if (data["HDD-SIZE"]) list.push(data["HDD-SIZE"].replace(" ", "") + " HDD");
+                if (data["SSD-SIZE"]) list.push(data["SSD-SIZE"].replace(" ", "") + " SSD");
+                if (data["USB-SIZE"]) list.push(data["USB-SIZE"].replace(" ", "") + " USB");
                 if (data["ROM-TYPE"]) list.push(data["ROM-TYPE"]);
                 if (list.length) data["DEV-DESCRIPTION"] = list.join("/");
                 // вычисляем конечный индекс производительности
-                if (benchmark) data["DEV-BENCHMARK"] = app.lib.num2str(benchmark, 5, ",", "");
+                if (benchmark) data["DEV-BENCHMARK"] = app.lib.num2str(benchmark, 5, ".", "");
             };
             // формируем вспомогательные переменные
             columns = [// список выводимых данных для вывода в одну строку
