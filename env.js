@@ -1,4 +1,4 @@
-/* 1.3.12 определяет дополнительные переменные среды
+/* 1.4.0 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -448,6 +448,39 @@ var env = new App({
                     // останавливаемся на первом элименте
                     break;
                 };
+                // вычисляем дополнительные характеристики
+                response = cim.execQuery(app.fun.debug(
+                    "SELECT *" +
+                    " FROM Win32_ComputerSystem"
+                ));
+                items = new Enumerator(response);
+                while (!items.atEnd()) {// пока не достигнут конец
+                    item = items.item();// получаем очередной элимент коллекции
+                    items.moveNext();// переходим к следующему элименту
+                    if (value = item.dnsHostName) host = value;
+                    if (value = item.name) if (!host) host = value.toLowerCase();
+                    if (item.domain != item.workgroup) domain = item.domain;
+                    // формируем идентификатор пользователя
+                    if (value = item.userName) user.domain = value.split(app.val.keyDelim)[0];
+                    if (value = item.userName) user.login = value.split(app.val.keyDelim)[1];
+                    if (value = item.userName) user.account = value;
+                    // характеристики
+                    if (value = app.fun.clear(host)) data["NET-HOST"] = value;
+                    if (value = app.fun.clear(item.domain)) data["NET-DOMAIN"] = value;
+                    if (value = app.fun.clear(item.model)) data["DEV-NAME"] = value;
+                    if (value) if (value = app.fun.clear(item.manufacturer, "Inc.", "Hewlett-Packard")) data["DEV-NAME"] = value.split(" ")[0] + " " + app.fun.clear(item.model);
+                    // тип устройства
+                    switch (true) {// поддерживаемые типы
+                        case 2 == parent.productType: value = "Controller"; break;
+                        case 3 == parent.productType: value = "Server"; break;
+                        case 2 == item.pcSystemTypeEx: value = "Notebook"; break;
+                        case 8 == item.pcSystemTypeEx: value = "Tablet"; break;
+                        default: value = "Desktop";
+                    };
+                    if (value) data["DEV-TYPE"] = value;
+                    // останавливаемся на первом элименте
+                    break;
+                };
                 // вычисляем букву диска для резервных копий
                 response = cim.execQuery(app.fun.debug(
                     "SELECT caption, size" +
@@ -577,30 +610,6 @@ var env = new App({
                         // останавливаемся на первом элименте
                         break;
                     };
-                };
-                // вычисляем дополнительные характеристики
-                response = cim.execQuery(app.fun.debug(
-                    "SELECT *" +
-                    " FROM Win32_ComputerSystem"
-                ));
-                items = new Enumerator(response);
-                while (!items.atEnd()) {// пока не достигнут конец
-                    item = items.item();// получаем очередной элимент коллекции
-                    items.moveNext();// переходим к следующему элименту
-                    if (value = item.dnsHostName) host = value;
-                    if (value = item.name) if (!host) host = value.toLowerCase();
-                    if (item.domain != item.workgroup) domain = item.domain;
-                    // формируем идентификатор пользователя
-                    if (value = item.userName) user.domain = value.split(app.val.keyDelim)[0];
-                    if (value = item.userName) user.login = value.split(app.val.keyDelim)[1];
-                    if (value = item.userName) user.account = value;
-                    // характеристики
-                    if (value = app.fun.clear(host)) data["NET-HOST"] = value;
-                    if (value = app.fun.clear(item.domain)) data["NET-DOMAIN"] = value;
-                    if (value = app.fun.clear(item.model)) data["DEV-NAME"] = value;
-                    if (value) if (value = app.fun.clear(item.manufacturer, "Inc.", "Hewlett-Packard")) data["DEV-NAME"] = value.split(" ")[0] + " " + app.fun.clear(item.model);
-                    // останавливаемся на первом элименте
-                    break;
                 };
                 // для поддержки старых операционных систем
                 if (!user.account && registry) {// если нужно выполнить
@@ -1023,11 +1032,13 @@ var env = new App({
                     if (item.mediaType && "UNKNOWN" == item.mediaType) continue;
                     // определяем тип насителя
                     switch (item.mediaType) {// поддерживаемые типы
-                        case "CD-ROM": data["ROM-TYPE"] = "CD"; break;
-                        case "DVD-ROM": data["ROM-TYPE"] = "DVD"; break;
-                        case "CD Writer": data["ROM-TYPE"] = "CD-RW"; break;
-                        case "DVD Writer": data["ROM-TYPE"] = "DVD-RW"; break;
+                        case "CD-ROM": value = "CD"; break;
+                        case "DVD-ROM": value = "DVD"; break;
+                        case "CD Writer": value = "CD-RW"; break;
+                        case "DVD Writer": value = "DVD-RW"; break;
+                        default: value = "";// сбрасываем значение
                     };
+                    if (value) data["ROM-TYPE"] = value;
                     // характеристики
                     if (value = app.fun.clear(item.caption, "ATA Device", "SCSI CdRom Device")) data["ROM-NAME"] = value;
                     if (value = app.fun.clear(item.drive)) data["ROM-DRIVE"] = value;
@@ -1338,7 +1349,7 @@ var env = new App({
                 "USR-ACCOUNT", "USR-DOMAIN", "USR-LOGIN", "USR-NAME", "USR-SID",
                 "USR-COUNTRY", "USR-CITY", "USR-COMPANY", "USR-DEPARTMENT", "USR-POSITION",
                 "USR-EMAIL", "USR-PHONE", "USR-MOBILE", "USR-PROFILE",
-                "DEV-NAME", "DEV-DESCRIPTION", "DEV-BENCHMARK"
+                "DEV-TYPE", "DEV-NAME", "DEV-DESCRIPTION", "DEV-BENCHMARK"
             ];
             // получаем данные с потока ввода
             if (config.input) {// если нужно получить данные
