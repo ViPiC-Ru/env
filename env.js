@@ -1,4 +1,4 @@
-/* 1.4.1 определяет дополнительные переменные среды
+/* 1.4.2 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -408,11 +408,13 @@ var env = new App({
             if (cim) {// если удалось получить доступ к объекту
                 // вычисляем ключ операционной системы
                 if (registry) {// если удалось получить доступ к объекту
+                    key = app.fun.debug("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion");
+                    // получаем ключ операционной системы
                     method = registry.methods_.item("getBinaryValue");
                     param = method.inParameters.spawnInstance_();
                     param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
-                    param.sSubKeyName = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
-                    param.sValueName = app.fun.debug("DigitalProductId");
+                    param.sSubKeyName = key;
+                    param.sValueName = "DigitalProductId";
                     item = registry.execMethod_(method.name, param);
                     if (!item.returnValue) {// если удалось прочитать значение
                         value = app.fun.bin2key(item.uValue);// преобразовываем значение ключа
@@ -460,10 +462,6 @@ var env = new App({
                     if (value = item.dnsHostName) host = value;
                     if (value = item.name) if (!host) host = value.toLowerCase();
                     if (item.domain != item.workgroup) domain = item.domain;
-                    // формируем идентификатор пользователя
-                    if (value = item.userName) user.domain = value.split(app.val.keyDelim)[0];
-                    if (value = item.userName) user.login = value.split(app.val.keyDelim)[1];
-                    if (value = item.userName) user.account = value;
                     // характеристики
                     if (value = app.fun.clear(host)) data["NET-HOST"] = value;
                     if (value = app.fun.clear(item.domain)) data["NET-DOMAIN"] = value;
@@ -611,76 +609,80 @@ var env = new App({
                         break;
                     };
                 };
-                // для поддержки старых операционных систем
+                // вычисляем информацию о пользователе для новых операционных систем
                 if (!user.account && registry) {// если нужно выполнить
                     list = [];// сбрасываем список значений
+                    key = app.fun.debug("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\LogonUI");
+                    // получаем логин и домен пользователя
+                    method = registry.methods_.item("getStringValue");
+                    param = method.inParameters.spawnInstance_();
+                    param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
+                    param.sSubKeyName = key;
+                    param.sValueName = "LastLoggedOnUser";
+                    item = registry.execMethod_(method.name, param);
+                    if (!item.returnValue) {// если удалось прочитать значение
+                        if (value = item.sValue) list = value.split(app.val.keyDelim);
+                        // формируем идентификатор пользователя
+                        if ("." == list[0]) list[0] = host.toUpperCase();
+                        if (2 == list.length) if (value = list[0]) user.domain = value;
+                        if (2 == list.length) if (value = list[1]) user.login = value;
+                        if (2 == list.length) user.account = list.join(app.val.keyDelim);
+                    };
+                    // получаем отображаемое имя пользователя
+                    method = registry.methods_.item("getStringValue");
+                    param = method.inParameters.spawnInstance_();
+                    param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
+                    param.sSubKeyName = key;
+                    param.sValueName = "LastLoggedOnDisplayName";
+                    item = registry.execMethod_(method.name, param);
+                    if (!item.returnValue) {// если удалось прочитать значение
+                        if (value = item.sValue) user.name = value;
+                    };
+                    // получаем угикальный идентификатор пользователя
+                    method = registry.methods_.item("getStringValue");
+                    param = method.inParameters.spawnInstance_();
+                    param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
+                    param.sSubKeyName = key;
+                    param.sValueName = "LastLoggedOnUserSID";
+                    item = registry.execMethod_(method.name, param);
+                    if (!item.returnValue) {// если удалось прочитать значение
+                        if (value = item.sValue) user.sid = value;
+                    };
+                };
+                // вычисляем информацию о пользователе для старых операционных систем
+                if (!user.account && registry) {// если нужно выполнить
+                    list = [];// сбрасываем список значений
+                    key = app.fun.debug("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon");
                     // вычисляем имя пользователя поумолчанию
                     method = registry.methods_.item("getStringValue");
                     param = method.inParameters.spawnInstance_();
                     param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
-                    param.sSubKeyName = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon";
-                    param.sValueName = app.fun.debug("DefaultDomainName");
+                    param.sSubKeyName = key;
+                    param.sValueName = "DefaultDomainName";
                     item = registry.execMethod_(method.name, param);
-                    if (!item.returnValue && item.sValue) list.push(item.sValue);
+                    if (!item.returnValue) {// если удалось прочитать значение
+                        if (value = item.sValue) list.push(value);
+                    };
                     // вычисляем домен пользователя поумолчанию
                     method = registry.methods_.item("getStringValue");
                     param = method.inParameters.spawnInstance_();
                     param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
-                    param.sSubKeyName = "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon";
-                    param.sValueName = app.fun.debug("DefaultUserName");
+                    param.sSubKeyName = key;
+                    param.sValueName = "DefaultUserName";
                     item = registry.execMethod_(method.name, param);
-                    if (!item.returnValue && item.sValue) list.push(item.sValue);
+                    if (!item.returnValue) {// если удалось прочитать значение
+                        if (value = item.sValue) list.push(value);
+                    };
                     // формируем идентификатор пользователя
-                    if (2 == list.length) user.domain = list[0];
-                    if (2 == list.length) user.login = list[1];
-                    if (2 == list.length) user.account = list.join(app.val.keyDelim);
-                };
-                // вычисляем характеристики из локального профиля
-                if (!user.account) {// если идентификатор пользователя неопределён
-                    unit = null;// сбрасываем значение
-                    response = cim.execQuery(app.fun.debug(
-                        "SELECT lastUseTime, localPath, loaded, sid" +
-                        " FROM Win32_UserProfile" +
-                        " WHERE special = FALSE"
-                    ));
-                    items = new Enumerator(response);
-                    while (!items.atEnd()) {// пока не достигнут конец
-                        item = items.item();// получаем очередной элимент коллекции
-                        items.moveNext();// переходим к следующему элименту
-                        // производим сравнение элиментов
-                        value = unit ? 0 : 1;// сбрасваем значение для сравнения
-                        if (!value) value = item.loaded && !unit.loaded ? 1 : value;
-                        if (!value) value = app.lib.compare(app.fun.wql2date(item.lastUseTime), app.fun.wql2date(unit.lastUseTime));
-                        // запоминаем более подходящий элимент
-                        if (value > 0) unit = item;
-                    };
-                    if (item = unit) {// если есть подходящий элимент
-                        // формируем идентификатор пользователя
-                        user.profile = item.localPath;
-                        if (value = item.sid) user.sid = value;
-                    };
-                };
-                // вычисляем характеристики из sid
-                if (!user.account && user.sid) {// если нужно выполнить
-                    list = [];// сбрасываем список значений
-                    // получаем вспомогательный объект
-                    try {// пробуем получить данные
-                        item = cim.get('Win32_SID.SID="' + user.sid + '"');
-                    } catch (e) {// при возникновении ошибки
-                        item = null;
-                    };
-                    // вычисляем имя и домен пользователя
-                    if (value = item.referencedDomainName) list.push(value);
-                    if (value = item.accountName) list.push(value);
-                    // формируем идентификатор пользователя
-                    if (2 == list.length) user.domain = list[0];
-                    if (2 == list.length) user.login = list[1];
+                    if ("." == list[0]) list[0] = host.toUpperCase();
+                    if (2 == list.length) if (value = list[0]) user.domain = value
+                    if (2 == list.length) if (value = list[1]) user.login = value;
                     if (2 == list.length) user.account = list.join(app.val.keyDelim);
                 };
                 // вычисляем характеристики локального пользователя
-                if (user.account && app.lib.hasValue([".", host], user.domain, false)) {// если нужно выполнить
+                if (user.account && !app.lib.compare(host, user.domain, true)) {// если нужно выполнить
                     response = cim.execQuery(app.fun.debug(
-                        "SELECT domain, name, fullName, sid" +
+                        "SELECT fullName, sid" +
                         " FROM Win32_UserAccount" +
                         " WHERE name = " + app.fun.repair(user.login) +
                         " AND domain = " + app.fun.repair(user.domain)
@@ -691,21 +693,14 @@ var env = new App({
                         items.moveNext();// переходим к следующему элименту
                         list = [];// сбрасываем список значений
                         // характеристики
-                        user.name = item.fullName;
+                        if (value = item.fullName) user.name = value;
                         if (value = item.sid) user.sid = value;
-                        // вычисляем имя и домен пользователя
-                        if (value = item.domain) list.push(value);
-                        if (value = item.name) list.push(value);
-                        // формируем идентификатор пользователя
-                        if (2 == list.length) user.domain = list[0];
-                        if (2 == list.length) user.login = list[1];
-                        if (2 == list.length) user.account = list.join(app.val.keyDelim);
                         // останавливаемся на первом элименте
                         break;
                     };
                 };
                 // вычисляем характеристики доменного пользователя
-                if (user.account && ldap && !app.lib.hasValue([".", host], user.domain, false)) {// если нужно выполнить
+                if (user.account && ldap && app.lib.compare(host, user.domain, true)) {// если нужно выполнить
                     list = [// список запрашиваемых аттрибутов
                         "DS_co", "DS_c", "DS_company", "DS_displayName", "DS_department", "DS_info",
                         "DS_homeDirectory", "DS_l", "DS_mail", "DS_mobile", "DS_objectSid",
@@ -721,8 +716,8 @@ var env = new App({
                         item = items.item();// получаем очередной элимент коллекции
                         items.moveNext();// переходим к следующему элименту
                         // характеристики
-                        user.name = item.DS_displayName;
                         user.home = item.DS_homeDirectory;
+                        if (value = item.DS_displayName) user.name = value;
                         if (unit = item.DS_objectSid) if (value = app.fun.bin2sid(unit.value)) user.sid = value;
                         if (value = app.fun.clear(item.DS_co)) data["USR-COUNTRY"] = value;
                         if (value = app.fun.clear(item.DS_c)) data["USR-COUNTRY-ID"] = value;
