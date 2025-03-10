@@ -197,7 +197,10 @@ cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ..
 - `APP-ULUS-DIR` - Полный путь каталога приложения.
 
 ### Приложение TeamViewer
-- `APP-TEAMVIEWER-ID` - Идентификатор компьютера.
+- `APP-TEAMVIEWER-ID` - Идентификатор устройства.
+
+### Приложение Intel Endpoint Management Assistant
+- `APP-INTEL-EMA-ID` - Идентификатор конечной точки.
 
 ## Другие переменные
 - `BAK-DRIVE` - Буква диска для резервных копий (вместе с двоеточием).

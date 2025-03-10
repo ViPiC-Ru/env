@@ -1,4 +1,4 @@
-/* 1.4.2 определяет дополнительные переменные среды
+/* 1.5.0 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -1313,6 +1313,27 @@ var env = new App({
                     // характеристики
                     data["APP-TEAMVIEWER-ID"] = value;
                 };
+                // вычисляем идентификатор Intel EMA
+                key = "NodeId";// ключ для проверки
+                list = [// список путей для проверки
+                    "SOFTWARE\\Intel\\EmaAgent"
+                ];
+                value = "";// сбрасываем значение переменной
+                if (registry) {// если удалось получить доступ к объекту
+                    method = registry.methods_.item("getStringValue");
+                    for (var i = 0, iLen = list.length; i < iLen && !value; i++) {
+                        param = method.inParameters.spawnInstance_();
+                        param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
+                        param.sSubKeyName = app.fun.debug(list[i]);
+                        param.sValueName = key;
+                        item = registry.execMethod_(method.name, param);
+                        if (!item.returnValue && item.sValue) value = app.fun.clear(item.sValue);
+                    };
+                };
+                if (value) {// если удалось получить значение
+                    // характеристики
+                    data["APP-INTEL-EMA-ID"] = value;
+                };
                 // вычисляем сумарное название компьютера
                 list = [];// очищаем значение переменной
                 if (data["CPU-NAME"] && data["CPU-CORE"] && data["CPU-SPEED"]) list.push(app.fun.clear(data["CPU-NAME"].replace("Dual-Core", "Intel"), "Dual Core", "Xeon", "Pentium", "Celeron", "Core2 Duo", "Core", "Processor", "Athlon 64", "Athlon", /,.+/, /@.+/, /\d\.d+GHz/) + " " + data["CPU-CORE"] + "x" + data["CPU-SPEED"].replace(" ", ""));
@@ -1344,6 +1365,7 @@ var env = new App({
                 "USR-ACCOUNT", "USR-DOMAIN", "USR-LOGIN", "USR-NAME", "USR-SID",
                 "USR-COUNTRY", "USR-CITY", "USR-COMPANY", "USR-DEPARTMENT", "USR-POSITION",
                 "USR-EMAIL", "USR-PHONE", "USR-MOBILE", "USR-PROFILE",
+                "APP-INTEL-EMA-ID",
                 "DEV-TYPE", "DEV-NAME", "DEV-DESCRIPTION", "DEV-BENCHMARK"
             ];
             // получаем данные с потока ввода
