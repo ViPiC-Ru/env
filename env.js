@@ -1,4 +1,4 @@
-/* 1.5.0 определяет дополнительные переменные среды
+/* 1.5.1 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
 
@@ -78,6 +78,23 @@ var env = new App({
                 date = new Date(year, 0, 0 - day + 7 * week);
                 // возвращаем результат
                 return date;
+            },
+
+            /**
+             * Получает значение свойства ADSI объекта.
+             * @param {ADSI} item - ADSI объект для получения данных.
+             * @param {string} attribute - Свойство ADSI объекта с данными.
+             * @returns {string} Значение свойства ADSI объекта.
+             */
+
+            getItemAttribute: function (item, attribute) {
+                var value = "";
+
+                try {// пробуем получить данные
+                    value = item.get(attribute);
+                } catch (e) { };// игнорируем исключения
+                // возвращаем результат
+                return value;
             },
 
             /**
@@ -293,7 +310,7 @@ var env = new App({
             })()
         },
         init: function () {// функция инициализации приложения
-            var shell, time, key, value, list, locator, cim, wmi, ldap, storage, registry,
+            var shell, time, key, value, list, locator, cim, wmi, storage, registry,
                 length, mode, method, param, unit, item, items, command, parent, score,
                 total, offset, index, columns, delim, isEmpty, isAddType, isLocalContext,
                 host = "", domain = "", user = {}, data = {}, config = {},
@@ -388,18 +405,16 @@ var env = new App({
                         switch (index) {// последовательно создаём объекты
                             case 1: cim = locator.connectServer(config.context, "root\\CIMV2", null, null, null, null, 0x80); break;
                             case 2: wmi = locator.connectServer(config.context, "root\\WMI", null, null, null, null, 0x80); break;
-                            case 3: ldap = locator.connectServer(".", "root\\directory\\LDAP", null, null, null, null, 0x80); break;
-                            case 4: storage = locator.connectServer(config.context, "root\\Microsoft\\Windows\\Storage", null, null, null, null, 0x80); break;
-                            case 5: registry = locator.connectServer(config.context, "root\\default", null, null, null, null, 0x80).get("stdRegProv"); break;
+                            case 3: storage = locator.connectServer(config.context, "root\\Microsoft\\Windows\\Storage", null, null, null, null, 0x80); break;
+                            case 4: registry = locator.connectServer(config.context, "root\\default", null, null, null, null, 0x80).get("stdRegProv"); break;
                             default: index = -1;// завершаем создание
                         };
                     } catch (e) {// при возникновении ошибки
                         switch (index) {// последовательно сбрасываем объекты
                             case 1: cim = null; index = -1; break;// завершаем создание
                             case 2: wmi = null; break;
-                            case 3: ldap = null; break;
-                            case 4: storage = null; break;
-                            case 5: registry = null; break;
+                            case 3: storage = null; break;
+                            case 4: registry = null; break;
                         };
                     };
                 };
@@ -699,39 +714,36 @@ var env = new App({
                         break;
                     };
                 };
-                // вычисляем характеристики доменного пользователя
-                if (user.account && ldap && app.lib.compare(host, user.domain, true)) {// если нужно выполнить
-                    list = [// список запрашиваемых аттрибутов
-                        "DS_co", "DS_c", "DS_company", "DS_displayName", "DS_department", "DS_info",
-                        "DS_homeDirectory", "DS_l", "DS_mail", "DS_mobile", "DS_objectSid",
-                        "DS_telephoneNumber", "DS_title", "DS_distinguishedName"
-                    ];
-                    response = ldap.execQuery(app.fun.debug(
-                        "SELECT " + list.join(", ") +
-                        " FROM DS_user" +
-                        " WHERE DS_sAMAccountName = " + app.fun.repair(user.login)
-                    ));
-                    items = new Enumerator(response);
-                    while (!items.atEnd()) {// пока не достигнут конец
-                        item = items.item();// получаем очередной элимент коллекции
-                        items.moveNext();// переходим к следующему элименту
+                // вычисляем характеристики пользователя из active directory
+                if (user.sid && app.lib.compare(host, user.domain, true)) {// если нужно выполнить
+                    unit = null;// сбрасываем значение
+                    key = app.fun.debug("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Group Policy\\State");
+                    // вычисляем distinguished name пользователя
+                    method = registry.methods_.item("getStringValue");
+                    param = method.inParameters.spawnInstance_();
+                    param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
+                    param.sSubKeyName = key + "\\" + user.sid;
+                    param.sValueName = "Distinguished-Name";
+                    item = registry.execMethod_(method.name, param);
+                    if (!item.returnValue) {// если удалось прочитать значение
+                        if (value = item.sValue) unit = app.wsh.ldap(value)[0];
                         // характеристики
-                        user.home = item.DS_homeDirectory;
-                        if (value = item.DS_displayName) user.name = value;
-                        if (unit = item.DS_objectSid) if (value = app.fun.bin2sid(unit.value)) user.sid = value;
-                        if (value = app.fun.clear(item.DS_co)) data["USR-COUNTRY"] = value;
-                        if (value = app.fun.clear(item.DS_c)) data["USR-COUNTRY-ID"] = value;
-                        if (value = app.fun.clear(item.DS_company, '"')) data["USR-COMPANY"] = value;
-                        if (value = app.fun.clear(item.DS_department, '"')) data["USR-DEPARTMENT"] = value;
-                        if (value = app.fun.clear(item.DS_distinguishedName)) data["USR-ACCOUNT-DN"] = value;
-                        if (value = app.fun.clear(item.DS_l)) data["USR-CITY"] = value;
-                        if (value = app.fun.clear(item.DS_mail)) data["USR-EMAIL"] = value;
-                        if (value = app.fun.clear(item.DS_mobile)) data["USR-MOBILE"] = value;
-                        if (value = app.fun.clear(item.DS_telephoneNumber)) data["USR-PHONE"] = value;
-                        if (value = app.fun.clear(item.DS_title, '"')) data["USR-POSITION"] = value;
-                        if (value = app.fun.clear(item.DS_info, '"')) data["USR-INFO"] = value;
-                        // останавливаемся на первом элименте
-                        break;
+                        if (value = item.sValue) data["USR-ACCOUNT-DN"] = value;
+                    };
+                    if (unit) {// если удалось подключиться к домену
+                        // характеристики
+                        user.home = app.fun.getItemAttribute(unit, "homeDirectory");
+                        if (value = app.fun.getItemAttribute(unit, "displayName")) user.name = value;
+                        if (value = app.fun.clear(app.fun.getItemAttribute(unit, "co"))) data["USR-COUNTRY"] = value;
+                        if (value = app.fun.clear(app.fun.getItemAttribute(unit, "c"))) data["USR-COUNTRY-ID"] = value;
+                        if (value = app.fun.clear(app.fun.getItemAttribute(unit, "company"), '"')) data["USR-COMPANY"] = value;
+                        if (value = app.fun.clear(app.fun.getItemAttribute(unit, "department"), '"')) data["USR-DEPARTMENT"] = value;
+                        if (value = app.fun.clear(app.fun.getItemAttribute(unit, "l"))) data["USR-CITY"] = value;
+                        if (value = app.fun.clear(app.fun.getItemAttribute(unit, "mail"))) data["USR-EMAIL"] = value;
+                        if (value = app.fun.clear(app.fun.getItemAttribute(unit, "mobile"))) data["USR-MOBILE"] = value;
+                        if (value = app.fun.clear(app.fun.getItemAttribute(unit, "telephoneNumber"))) data["USR-PHONE"] = value;
+                        if (value = app.fun.clear(app.fun.getItemAttribute(unit, "title"), '"')) data["USR-POSITION"] = value;
+                        if (value = app.fun.clear(app.fun.getItemAttribute(unit, "info"), '"')) data["USR-INFO"] = value;
                     };
                 };
                 // вычисляем характеристики из сетевого профиля
@@ -790,21 +802,19 @@ var env = new App({
                     if (value = list[2]) data["USR-NAME-THIRD"] = value;
                     if (value = list[3]) data["USR-NAME-FOURTH"] = value;
                 };
-                // вычисляем distinguished name компьютера в active directory 
-                if (host && ldap && domain) {// если нужно выполнить
-                    response = ldap.execQuery(app.fun.debug(
-                        "SELECT DS_distinguishedName" +
-                        " FROM DS_computer" +
-                        " WHERE DS_cn = " + app.fun.repair(host)
-                    ));
-                    items = new Enumerator(response);
-                    while (!items.atEnd()) {// пока не достигнут конец
-                        item = items.item();// получаем очередной элимент коллекции
-                        items.moveNext();// переходим к следующему элименту
+                // вычисляем характеристики компьютера из active directory
+                if (host && domain) {// если нужно выполнить
+                    key = app.fun.debug("SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Group Policy\\State\\Machine");
+                    // вычисляем distinguished name компьютера
+                    method = registry.methods_.item("getStringValue");
+                    param = method.inParameters.spawnInstance_();
+                    param.hDefKey = 0x80000002;// HKEY_LOCAL_MACHINE
+                    param.sSubKeyName = key;
+                    param.sValueName = "Distinguished-Name";
+                    item = registry.execMethod_(method.name, param);
+                    if (!item.returnValue) {// если удалось прочитать значение
                         // характеристики
-                        if (value = app.fun.clear(item.DS_distinguishedName)) data["NET-HOST-DN"] = value;
-                        // останавливаемся на первом элименте
-                        break;
+                        if (value = item.sValue) data["NET-HOST-DN"] = value;
                     };
                 };
                 // вычисляем характеристики центрального процессора
