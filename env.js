@@ -1,4 +1,4 @@
-/* 1.6.0 определяет дополнительные переменные среды
+/* 1.6.1 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<output>[:<input>]] [<option>...] ... [< <stdin>] [>> <stdout>]
 
@@ -355,7 +355,7 @@ var env = new App({
         init: function () {// функция инициализации приложения
             var shell, time, key, value, list, locator, cim, wmi, storage, registry,
                 length, mode, method, param, unit, item, items, command, parent, score,
-                total, offset, index, columns, delim, wrap, isEmpty, isAddType,
+                serial, total, offset, index, columns, delim, wrap, isEmpty, isAddType,
                 host = "", domain = "", user = {}, data = {}, config = {},
                 benchmark = 0;
 
@@ -459,7 +459,7 @@ var env = new App({
                     if (value = item.installDate) data["SYS-INSTALL-DATE"] = app.lib.date2str(app.fun.wql2date(value), "d.m.Y");
                     if (value = item.lastBootUpTime) data["SYS-RESET"] = app.lib.date2str(app.fun.wql2date(value), "d.m.Y H:i:s");
                     if (value = item.lastBootUpTime) data["SYS-RESET-DATE"] = app.lib.date2str(app.fun.wql2date(value), "d.m.Y");
-                    if (value = app.fun.clear(item.serialNumber)) data["SYS-SERIAL"] = value;
+                    if (value = app.fun.clear(item.serialNumber)) serial = data["SYS-SERIAL"] = value;
                     if (value = app.fun.clear(item.description)) data["SYS-DESCRIPTION"] = value;
                     data["SYS-ARCHITECTURE"] = item.osArchitecture && !item.osArchitecture.indexOf("64") ? "x64" : "x86";
                     // останавливаемся на первом элименте
@@ -521,7 +521,7 @@ var env = new App({
                     // характеристики
                     if (value = app.fun.clear(item.product)) data["PCB-NAME"] = value;
                     if (value) if (value = app.fun.clear(item.manufacturer, "Inc.").replace("Hewlett-Packard", "HP")) data["PCB-NAME"] = value.split(" ")[0] + " " + app.fun.clear(item.product);
-                    if (value = app.fun.clear(item.serialNumber)) data["PCB-SERIAL"] = value;
+                    if (value = app.fun.clear(item.serialNumber)) serial = data["PCB-SERIAL"] = value;
                     // останавливаемся на первом элименте
                     break;
                 };
@@ -540,7 +540,7 @@ var env = new App({
                     if (value = app.fun.clear(item.releaseDate)) data["PCB-BIOS-RELEASE-DATE"] = app.lib.date2str(app.fun.wql2date(value, time.getTimezoneOffset()), "d.m.Y");
                     if (value = app.fun.clear(item.manufacturer, "Inc.")) data["PCB-BIOS-MANUFACTURE"] = value;
                     if (value = app.fun.clear(item.smBIOSBIOSVersion)) data["PCB-BIOS-VERSION"] = value;
-                    if (value = app.fun.clear(item.serialNumber)) data["PCB-BIOS-SERIAL"] = value;
+                    if (value = app.fun.clear(item.serialNumber)) serial = data["PCB-BIOS-SERIAL"] = value;
                     // останавливаемся на первом элименте
                     break;
                 };
@@ -1354,6 +1354,7 @@ var env = new App({
                 if (data["USB-SIZE"]) list.push(data["USB-SIZE"].replace(" ", "") + " USB");
                 if (data["ROM-TYPE"]) list.push(data["ROM-TYPE"]);
                 if (list.length) data["DEV-DESCRIPTION"] = list.join("/");
+                if (serial) if (value = serial.split("/")[0].split("-").join("").substring(0, 10)) data["DEV-SERIAL"] = value;
                 // вычисляем конечный индекс производительности
                 if (benchmark) data["DEV-BENCHMARK"] = app.lib.num2str(benchmark, 5, ".", "");
             };
