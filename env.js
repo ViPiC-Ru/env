@@ -1,6 +1,6 @@
-/* 1.5.1 определяет дополнительные переменные среды
+/* 1.6.0 определяет дополнительные переменные среды
 
-cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ...
+cscript env.min.js [\\<context>] [<output>[:<input>]] [<option>...] ... [< <stdin>] [>> <stdout>]
 
 <context>   - В контексте какого компьютера получить переменные.
 <input>     - Формат текстовых данных стандартного потока ввода.
@@ -11,11 +11,12 @@ cscript env.min.js [\\<context>] [<input>@<charset>] [<output>] [<option>...] ..
     ini     - Вывести дополнительные переменные в ini формате.
     csv     - Вывести в csv формате (заглавное написание добавляет заголовок).
     tsv     - Вывести в tsv формате (заглавное написание добавляет заголовок).
-<charset>   - Кодировка текста стандартного потока ввода.
 <option>    - Дополнительные опции (может быть несколько, порядок не важен).
     silent  - Последующие команды выполнить без отображения.
     nowait  - Последующие команды выполнить без ожидания.
     debug   - Ввести в стандартный поток ошибок отладочную информацию.
+<stdin>     - Путь к файлу с текстовыми данными для потока ввода
+<stdout>    - Путь к файлу с текстовыми данными для потока вывода
 
 */
 
@@ -23,13 +24,14 @@ var env = new App({
     driveMinSize: 26 * 1024 * 1024 * 1024,              // минимальный общий объём диска для резервных копий в байтах
     runStyle: 1,                                        // стиль отображения запущенных программ по умолчанию
     defReturn: 0,                                       // значение возвращаемое по умолчанию
+    stdIn: "<",                                         // обозначение потока ввода
+    stdOut: ">",                                        // обозначение потока вывода с перезаписью
+    stdOutAdd: ">>",                                    // обозначение потока вывода с добавлением
     argWrap: '"',                                       // обрамление аргументов
     argDelim: " ",                                      // разделитель значений агрументов
     linDelim: "\r\n",                                   // разделитель строк значений
     keyDelim: "\\",                                     // разделитель ключевых значений
-    chrDelim: "@",                                      // разделитель кодировки от значений
-    getDelim: "+",                                      // разделитель который нужно заменить
-    setDelim: "#",                                      // разделитель на который нужно заменить
+    stdDelim: ":",                                      // разделитель форматов потоков вводв и вывода
     iniDelim: "=",                                      // разделитель значений для файла выгрузки ini
     csvDelim: ";",                                      // разделитель значений для файла выгрузки csv
     tsvDelim: "\t",                                     // разделитель значений для файла выгрузки tsv
@@ -95,6 +97,47 @@ var env = new App({
                 } catch (e) { };// игнорируем исключения
                 // возвращаем результат
                 return value;
+            },
+
+            /**
+             * Преобразует значение для формата потока ввода.
+             * @param {string} value - Значение для преобразования.
+             * @param {string} name - Название для преобразования.
+             * @returns {array} Массив с преобразованным значением.
+             */
+
+            convInputFormatParam: function (value, name) {
+                value = value.split(app.val.stdDelim)[1];
+                if (!app.lib.hasValue(["ini", "csv", "tsv", "CSV", "TSV"], value, true)) name = true;
+                return [value, name];
+            },
+
+            /**
+             * Преобразует значение для формата потока вывода.
+             * @param {string} value - Значение для преобразования.
+             * @param {string} name - Название для преобразования.
+             * @returns {array} Массив с преобразованным значением.
+             */
+
+            convOutputFormatParam: function (value, name) {
+                value = value.split(app.val.stdDelim)[0];
+                if (!app.lib.hasValue(["ini", "csv", "tsv", "CSV", "TSV"], value, true)) name = true;
+                return [value, name];
+            },
+
+            /**
+             * Преобразует значение для параметра контекста.
+             * @param {string} value - Значение для преобразования.
+             * @param {string} name - Название для преобразования.
+             * @returns {array} Массив с преобразованным значением.
+             */
+
+            convContextParam: function (value, name) {
+                var list = value.split(app.val.keyDelim);
+
+                if (3 == list.length && !list[0] && !list[1]) value = list[2];
+                else name = true;
+                return [value, name];
             },
 
             /**
@@ -312,7 +355,7 @@ var env = new App({
         init: function () {// функция инициализации приложения
             var shell, time, key, value, list, locator, cim, wmi, storage, registry,
                 length, mode, method, param, unit, item, items, command, parent, score,
-                total, offset, index, columns, delim, isEmpty, isAddType, isLocalContext,
+                total, offset, index, columns, delim, wrap, isEmpty, isAddType,
                 host = "", domain = "", user = {}, data = {}, config = {},
                 benchmark = 0;
 
@@ -321,81 +364,38 @@ var env = new App({
             locator = new ActiveXObject("wbemScripting.Swbemlocator");
             locator.security_.impersonationLevel = 3;// Impersonate
             // получаем параметры конфигурации
+            delim = app.val.iniDelim; wrap = app.val.argWrap;
             length = wsh.arguments.length;// получаем длину
             for (index = 0; index < length; index++) {
                 value = wsh.arguments.item(index);// получаем очередное значение
-                // контекст выполнения
-                key = "context";// ключ проверяемого параметра
-                if (!(key in config)) {// если нет в конфигурации
-                    list = value.split(app.val.keyDelim);// вспомогательный список
-                    if (3 == list.length) {// если пройдена основная проверка
-                        if (// множественное условие
-                            !list[0] && !list[1]
-                        ) {// если пройдена дополнительная проверка
-                            config[key] = list[2];// задаём значение
-                            continue;// переходим к следующему параметру
-                        };
-                    };
-                };
-                // импорт данных и кодировка
-                key = "input";// ключ проверяемого параметра
-                if (!(key in config)) {// если нет в конфигурации
-                    list = value.split(app.val.chrDelim);// вспомогательный список
-                    if (2 == list.length) {// если пройдена основная проверка
-                        if (// множественное условие
-                            app.lib.hasValue(["ini", "csv", "tsv", "CSV", "TSV"], list[0], true) && list[1]
-                        ) {// если пройдена дополнительная проверка
-                            config[key] = list[0];// задаём значение
-                            config.charset = list[1];// задаём значение
-                            continue;// переходим к следующему параметру
-                        };
-                    };
-                };
-                // экспорт данных
-                key = "output";// ключ проверяемого параметра
-                if (!(key in config)) {// если нет в конфигурации
-                    list = value.split(app.val.chrDelim);// вспомогательный список
-                    if (1 == list.length) {// если пройдена основная проверка
-                        if (// множественное условие
-                            app.lib.hasValue(["ini", "csv", "tsv", "CSV", "TSV"], list[0], true)
-                        ) {// если пройдена дополнительная проверка
-                            config[key] = list[0];// задаём значение
-                            continue;// переходим к следующему параметру
-                        };
-                    };
-                };
-                // тихий режим
-                key = "silent";// ключ проверяемого параметра
-                if (!(key in config)) {// если нет в конфигурации
-                    if (!app.lib.compare(key, value, true)) {// если пройдена основная проверка
-                        config[key] = true;// задаём значение
-                        continue;// переходим к следующему параметру
-                    };
-                };
-                // без ожидания
-                key = "nowait";// ключ проверяемого параметра
-                if (!(key in config)) {// если нет в конфигурации
-                    if (!app.lib.compare(key, value, true)) {// если пройдена основная проверка
-                        config[key] = true;// задаём значение
-                        continue;// переходим к следующему параметру
-                    };
-                };
-                // режим отладки
-                key = "debug";// ключ проверяемого параметра
-                if (!(key in config)) {// если нет в конфигурации
-                    if (!app.lib.compare(key, value, true)) {// если пройдена основная проверка
-                        config[key] = true;// задаём значение
-                        continue;// переходим к следующему параметру
-                    };
-                };
-                // если закончились параметры конфигурации
+                // работаем с параметрами
+                if (!("context" in config) && app.lib.setParamKeys(config, "context", app.fun.convContextParam, false, [value], delim, wrap, null)) continue;
+                if (// множественное условие
+                    !("output" in config) && !("input" in config) &&
+                    app.lib.setParamKeys(config, "output", app.fun.convOutputFormatParam, false, [value], delim, wrap, null) +
+                    app.lib.setParamKeys(config, "input", app.fun.convInputFormatParam, false, [value], delim, wrap, null)
+                ) continue;
+                // если закончились параметры
                 break;// остававливаем получние параметров
             };
-            // вносим поправки для конфигурации
             offset = index;// запоминаем смещение по параметрам
-            isLocalContext = !("context" in config);
-            if (isLocalContext) config.context = ".";
-            if ("auto" == config.charset) config.charset = "windows-1251";
+            for (index = length; index > offset + 1; index -= 2) {
+                key = wsh.arguments.item(index - 2);// получаем очередной ключ
+                value = wsh.arguments.item(index - 1);// получаем очередное значение
+                // работаем с параметрами
+                if (!("stdin" in config) && value && app.lib.hasValue([app.val.stdIn], key, true) && (config["stdin"] = value)) continue;
+                if (// множественное условие
+                    !("stdout" in config) && !("append" in config) && value &&
+                    (app.lib.hasValue([app.val.stdOut, app.val.stdOutAdd], key, true) && (config["stdout"] = value)) +
+                    (app.lib.hasValue([app.val.stdOutAdd], key, true) && (config["append"] = true))
+                ) continue;
+                // если закончились параметры
+                break;// остававливаем получние параметров
+            };
+            length = index;// запоминаем смещение по параметрам
+            // вносим поправки для конфигурации
+            if (!("context" in config)) config.context = ".";
+            if (("stdout" in config)) config.append = !!config.append;
             // создаём служебные объекты
             app.fun.debug(config.debug);// если это необходимо включаем отладочный режим
             if (config.context) {// если есть контекст выполнения
@@ -1383,11 +1383,9 @@ var env = new App({
                 // получаем текстовые данные из потока
                 app.fun.debug("Read input data");
                 try {// пробуем получить данные
-                    key = "windows-1251";
-                    value = wsh.stdIn.readAll();
-                    if (config.charset != key) {// если требуется перекодировка
-                        value = app.wsh.iconv(config.charset, key, value);
-                    };
+                    if (!config.stdin) {// если используется реальный поток
+                        value = wsh.stdIn.readAll();// читаем все данные
+                    } else value = app.wsh.getFileText(config.stdin);
                 } catch (e) {// при возникновении ошибки
                     value = "";
                 };
@@ -1472,11 +1470,13 @@ var env = new App({
             };
             // отправляем данные с поток вывода
             if (config.output && value) {// если нужно выполнить
-                value += app.val.linDelim;
                 // отправляем текстовые данные в поток
                 app.fun.debug("Write output data");
                 try {// пробуем отправить данные
-                    wsh.stdOut.write(value);
+                    if (!config.stdout) {// если используется реальный поток
+                        value += app.val.linDelim;// добавляем пустую строку в конец
+                        wsh.stdOut.write(value);// пишим все данные
+                    } else app.wsh.setFileText(config.stdout, value, config.append);
                 } catch (e) { };// игнорируем исключения
             };
             // добавляем новые переменные во временное окружение
@@ -1488,10 +1488,8 @@ var env = new App({
             };
             // готовим командную строку для вызова
             items = [];// сбрасываем список аргументов
-            length = wsh.arguments.length;// получаем длину
             for (index = offset; index < length; index++) {
                 value = wsh.arguments.item(index);// получаем очередное значение
-                value = value.split(app.val.getDelim).join(app.val.setDelim);
                 value = shell.expandEnvironmentStrings(value);
                 if (!value || -1 != value.indexOf(app.val.argDelim)) {// если есть разделитель
                     value = app.val.argWrap + value + app.val.argWrap;
