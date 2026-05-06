@@ -1,4 +1,4 @@
-/* 1.6.2 определяет дополнительные переменные среды
+/* 1.6.3 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<output>[:<input>]] [<option>...] ... [< <stdin>] [>> <stdout>]
 
@@ -369,6 +369,9 @@ var env = new App({
             for (index = 0; index < length; index++) {
                 value = wsh.arguments.item(index);// получаем очередное значение
                 // работаем с параметрами
+                if (!("silent" in config) && app.lib.setParamKeys(config, null, ["silent"], false, [value], delim, wrap, null)) continue;
+                if (!("nowait" in config) && app.lib.setParamKeys(config, null, ["nowait"], false, [value], delim, wrap, null)) continue;
+                if (!("debug" in config) && app.lib.setParamKeys(config, null, ["debug"], false, [value], delim, wrap, null)) continue;
                 if (!("context" in config) && app.lib.setParamKeys(config, "context", app.fun.convContextParam, false, [value], delim, wrap, null)) continue;
                 if (// множественное условие
                     !("output" in config) && !("input" in config) &&
