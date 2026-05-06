@@ -1,4 +1,4 @@
-/* 1.6.3 определяет дополнительные переменные среды
+/* 1.6.4 определяет дополнительные переменные среды
 
 cscript env.min.js [\\<context>] [<output>[:<input>]] [<option>...] ... [< <stdin>] [>> <stdout>]
 
@@ -360,9 +360,20 @@ var env = new App({
                 benchmark = 0;
 
             time = new Date();
-            shell = new ActiveXObject("WScript.Shell");
             locator = new ActiveXObject("wbemScripting.Swbemlocator");
             locator.security_.impersonationLevel = 3;// Impersonate
+            // безопастно создаём нужные объекты
+            delim = "$#!&%";// маскирующие символы
+            items = [// список идентификаторов объектов
+                "W$#!&%Sc$#!&%ri$#!&%pt.She$#!&%ll"
+            ];
+            for (var i = 0, iLen = items.length; !shell && i < iLen; i++) {
+                item = items[i];// получаем очередной элимент
+                value = item.split(delim).join("");
+                try {// пробуем сформировать объект
+                    shell = new ActiveXObject(value);
+                } catch (e) { };// игнорируем исключения
+            };
             // получаем параметры конфигурации
             delim = app.val.iniDelim; wrap = app.val.argWrap;
             length = wsh.arguments.length;// получаем длину
