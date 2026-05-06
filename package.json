@@ -1,13 +1,13 @@
 {
     "name": "env",
-    "version": "1.6.1",
+    "version": "1.6.2",
     "description": "Определяет дополнительные переменные среды",
     "main": "env.js",
     "author": "ViPiC",
     "license": "GPL-3.0",
     "dependencies": {
-        "app": "git+file://repository/script/app#semver:0.3.x",
-        "app.lib": "git+file://repository/script/app.lib#semver:0.x",
-        "app.wsh": "git+file://repository/script/app.wsh#semver:0.x"
+        "app": "git+file://storage/project/script/app#semver:0.3.x",
+        "app.lib": "git+file://storage/project/script/app.lib#semver:0.x",
+        "app.wsh": "git+file://storage/project/script/app.wsh#semver:0.x"
     }
 }
